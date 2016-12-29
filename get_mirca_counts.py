@@ -110,7 +110,7 @@ def get_regions_from_gtf(gtf_file,flank_len=100):
 
 			if ls[2]=='gene':
 				raise Exception("this shouldn't happen!")
-			elif ls[2] in ['CDS','start_codon','stop_codon']:
+			elif ls[2]=='CDS':
 				cds_exons.append((int(ls[3])-1,int(ls[4])))
 			elif ls[2]=='UTR':
 				utr_exons.append((int(ls[3])-1,int(ls[4])))
@@ -188,14 +188,15 @@ if __name__ == '__main__':
 	parser=OptionParser()
 	parser.add_option('-i','--inf',dest='inf',help="either: 12-column bed file with transcript definitions; or GTF file")
 	parser.add_option('-B','--bam',dest='bam',help="comma-separated list of BAM files with mapped reads, should have indices")
-	parser.add_option('-K','--K',dest='K',default=7,help="k-mers to analyze (default: 7)",type=int)
-	parser.add_option('-E','--E',dest='E',default=5,help="extend k-mer regions by E nucleotides (default: 5)",type=int)
-	parser.add_option('-f','--flank_len',dest='flank_len',default=100,type=int,help="length of intron flanks (default: 100)")
-	parser.add_option('-r','--region',dest='region',default='utr3',help="which region to use (utr5/cds/utr3/tx/intron_up/intron_down) (default: utr3)")
+	parser.add_option('-K','--K',dest='K',default=7,help="k-mers to analyze [7]",type=int)
+	parser.add_option('-E','--E',dest='E',default=5,help="extend k-mer regions by E nucleotides [5]",type=int)
+	parser.add_option('-f','--flank_len',dest='flank_len',default=100,type=int,help="length of intron flanks [100]")
+	parser.add_option('-r','--region',dest='region',default='utr3',help="which region to use (utr5/cds/utr3/tx/intron_up/intron_down) [utr3]")
 	parser.add_option('-n','--names',dest='names',default=None,help="header names for bam files (comma-separated)")
 	parser.add_option('-m','--motif_file',dest='motif_file',help="file with motif name and comma-separated list of kmers for each motif")
 	parser.add_option('-g','--genome',dest='genome',help="genome file (fasta; must be indexed)")
 	parser.add_option('-T','--use_TC',dest='use_TC',action='store_true',help="use number of TC conversions instead of read counts")
+	parser.add_option('-d','--max_depth',dest='max_depth',type=int,default=1000,help="max per-BAM depth [1000]")
 
 	options,args=parser.parse_args()
 
@@ -231,7 +232,7 @@ if __name__ == '__main__':
 
 	if options.motif_file is not None:
 		sys.stdout.write('# using RBP motifs from {0}\n'.format(options.motif_file))
-	sys.stdout.write('# K={0}, E={1}, flank_len={2}'.format(K,E,options.flank_len))
+	sys.stdout.write('# K={0}, E={1}, flank_len={2}\n'.format(K,E,options.flank_len))
 
 	sys.stdout.write('gene\t{0}'.format('motif' if use_motifs else 'kmer'))
 	for n in range(nB):
@@ -264,7 +265,7 @@ if __name__ == '__main__':
 
 		for start,end in region_exons:
 			# get read coverage using samtools mpileup
-			proc=subprocess.Popen(['samtools','mpileup']+bam_files+['-f',options.genome,'-r',chrom+':'+str(start+1)+'-'+str(end)],stdout=subprocess.PIPE)
+			proc=subprocess.Popen(['samtools','mpileup']+bam_files+['-f',options.genome,'-r',chrom+':'+str(start+1)+'-'+str(end),'-d',str(options.max_depth)],stdout=subprocess.PIPE)
 			cov=np.zeros((end-start,nB),dtype=np.int)
 			while True:
 				line=proc.stdout.readline()
