@@ -19,7 +19,8 @@ python get_mirca_read_counts.py \
        -E 0 \
        -r utr5/cds/utr3/tx/intron_up/intron_down \
        -m rbp_motifs.txt \
-       -g genome.fa > mirca_counts.out
+       -g genome.fa \
+       -o mirca_counts.out
 ```
 Conversion events instead of reads are counted when using ``-T``. More readable names for files can be given with ``-n "condition1_1,condition1_2,condition2_1,condition2_2"``, otherwise bam file names are used. Additional options can be explored using ``python get_mirca_read_counts.py -h``, e.g., the intron flank length can be adjusted using ``-f`` (default: 100nt).
 

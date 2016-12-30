@@ -197,11 +197,17 @@ if __name__ == '__main__':
 	parser.add_option('-g','--genome',dest='genome',help="genome file (fasta; must be indexed)")
 	parser.add_option('-T','--use_TC',dest='use_TC',action='store_true',help="use number of TC conversions instead of read counts")
 	parser.add_option('-d','--max_depth',dest='max_depth',type=int,default=1000,help="max per-BAM depth [1000]")
+	parser.add_option('-o','--outfile',dest='outf',help="output file [stdout]")
 
 	options,args=parser.parse_args()
 
 	K=options.K
 	E=options.E
+
+	if options.outfile is None:
+		outf=sys.stdout
+	else:
+		outf=open(options.outfile,'w')
 
 	if options.region not in ['utr5','cds','utr3','tx','intron_up','intron_down']:
 		raise Exception("unknown region selected!")
@@ -226,18 +232,18 @@ if __name__ == '__main__':
 	else:
 		names=dict(zip(range(nB),range(1,nB+1)))
 
-	sys.stdout.write('# {0} counts in {1} from {2}'.format('TC' if options.use_TC else 'read', options.region,options.inf)+'\n# bam files:\n')
+	outf.write('# {0} counts in {1} from {2}'.format('TC' if options.use_TC else 'read', options.region,options.inf)+'\n# bam files:\n')
 	for n in range(nB):
-		sys.stdout.write('#  {0}: {1} ({2} reads)\n'.format(names[n],options.bam.split(',')[n],nmapped[n]))
+		outf.write('#  {0}: {1} ({2} reads)\n'.format(names[n],options.bam.split(',')[n],nmapped[n]))
 
 	if options.motif_file is not None:
-		sys.stdout.write('# using RBP motifs from {0}\n'.format(options.motif_file))
-	sys.stdout.write('# K={0}, E={1}, flank_len={2}\n'.format(K,E,options.flank_len))
+		outf.write('# using RBP motifs from {0}\n'.format(options.motif_file))
+	outf.write('# K={0}, E={1}, flank_len={2}\n'.format(K,E,options.flank_len))
 
-	sys.stdout.write('gene\t{0}'.format('motif' if use_motifs else 'kmer'))
+	outf.write('gene\t{0}'.format('motif' if use_motifs else 'kmer'))
 	for n in range(nB):
-		sys.stdout.write('\tcov_{0}'.format(names[n]))
-	sys.stdout.write('\n')
+		outf.write('\tcov_{0}'.format(names[n]))
+	outf.write('\n')
 
 	if 'gtf' in options.inf:
 		get_regions = get_regions_from_gtf
@@ -333,10 +339,10 @@ if __name__ == '__main__':
 				tot_motif_cov.loc['tot']=tot_kmer_cov.loc['tot']
 				# print counts as integer
 				for motif,vals in tot_motif_cov.iterrows():
-					sys.stdout.write("{0}\t{1}\t".format(name,motif)+'\t'.join('{0:.0f}'.format(v) for v in vals)+'\n')
+					outf.write("{0}\t{1}\t".format(name,motif)+'\t'.join('{0:.0f}'.format(v) for v in vals)+'\n')
 			else:
 				# print counts as integer
 				for kmer,vals in tot_kmer_cov.iterrows():
-					sys.stdout.write("{0}\t{1}\t".format(name,kmer)+'\t'.join('{0:.0f}'.format(v) for v in vals)+'\n')
+					outf.write("{0}\t{1}\t".format(name,kmer)+'\t'.join('{0:.0f}'.format(v) for v in vals)+'\n')
 
 	print >> sys.stderr, 'done ({0} skipped)'.format(nskipped)
