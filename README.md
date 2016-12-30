@@ -24,7 +24,8 @@ python get_mirca_read_counts.py \
 Conversion events instead of reads are counted when using ``-T``. More readable names for files can be given with ``-n "condition1_1,condition1_2,condition2_1,condition2_2"``, otherwise bam file names are used. Additional options can be explored using ``python get_mirca_read_counts.py -h``.
 
 ### 2. run DESeq2
-``` Rscript run_deseq2_for_mirca.R \
+``` 
+Rscript run_deseq2_for_mirca.R \
 	-i mirca_counts.out \
 	-o mirca_deseq2_results \
 	-c condition1,condition1,condition2,condition2 
