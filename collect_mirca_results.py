@@ -53,19 +53,31 @@ else:
 
 	print >> sys.stderr, "found {0} differential binding events at {1:.0f}% FDR".format(nsig,100*options.alpha)
 
+def collect_stats (df):
+
+	""" helper function to aggregate binding events for each motif """
+
+	up=df['log2FoldChange'] < 0
+	down=df['log2FoldChange'] > 0
+
+	return pd.Series([up.sum(),\
+					  down.sum(),\
+					  df['log2FoldChange'].mean(),\
+					  df['log2FoldChange'].sem(),\
+					  scipy.stats.ttest_1samp(df['log2FoldChange'],0)[1],\
+					  ','.join(zip(*df[up].index.tolist())[0]) if up.sum() > 0 else '',\
+					  ','.join(zip(*df[down].index.tolist())[0]) if down.sum() > 0 else ''],\
+					 index=['nup','ndown','lfc_mean','lfc_sem','lfc_pval','genes_up','genes_down'])
+
 events=deseq2_results.stack(level=0,dropna=True)
 sig_events=events[events['pvalue'] < pc]
 events_by_motif=sig_events.groupby(level=1)
-motif_stats=events_by_motif.apply(lambda df: pd.Series(dict(ndown=(df['log2FoldChange'] < 0).sum(),\
-															nup=(df['log2FoldChange'] > 0).sum(),\
-															lfc_mean=df['log2FoldChange'].mean(),\
-															lfc_sem=df['log2FoldChange'].sem(),\
-															lfc_pval=scipy.stats.ttest_1samp(df['log2FoldChange'],0)[1])))
+motif_stats=events_by_motif.apply(collect_stats)
 
 if options.outf is not None:
 	print >> sys.stderr, 'writing to '+options.outf
-	motif_stats.to_csv(options.outf)
+	motif_stats.to_csv(options.outf,sep='\t')
 else:
 	print >> sys.stderr, 'writing to stdout'
-	motif_stats.to_csv(sys.stdout)
+	motif_stats.to_csv(sys.stdout,sep='\t')
 	
