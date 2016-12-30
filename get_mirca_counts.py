@@ -204,10 +204,10 @@ if __name__ == '__main__':
 	K=options.K
 	E=options.E
 
-	if options.outfile is None:
+	if options.outf is None:
 		outf=sys.stdout
 	else:
-		outf=open(options.outfile,'w')
+		outf=open(options.outf,'w')
 
 	if options.region not in ['utr5','cds','utr3','tx','intron_up','intron_down']:
 		raise Exception("unknown region selected!")
