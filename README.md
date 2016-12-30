@@ -21,7 +21,7 @@ python get_mirca_read_counts.py \
        -m rbp_motifs.txt \
        -g genome.fa > mirca_counts.out
 ```
-Conversion events instead of reads are counted when using ``-T``. More readable names for files can be given with ``-n "condition1_1,condition1_2,condition2_1,condition2_2"``, otherwise bam file names are used. Additional options can be explored using ``python get_mirca_read_counts.py -h``.
+Conversion events instead of reads are counted when using ``-T``. More readable names for files can be given with ``-n "condition1_1,condition1_2,condition2_1,condition2_2"``, otherwise bam file names are used. Additional options can be explored using ``python get_mirca_read_counts.py -h``, e.g., the intron flank length can be adjusted using ``-f`` (default: 100nt).
 
 ### 2. run DESeq2
 ``` 
@@ -39,6 +39,6 @@ A control run with permuted labels can be performed like this:
 ### 3. collect results
 ``` python collect_mirca_results.py -i mirca_deseq2_results -o mirca_results.tsv ```
 
-This script collects the DESeq2 output in mirca_deseq2_results and selects significant events. An empirical FDR for selecting significant events (specified with ``-a``, default: 0.05) can be calculated by specifying the output directory of a control run using ``-c mirca_deseq2_control``, otherwise DESeq2 adjusted p-values are used. Events per motif are combined and statistics collected: number of genes with up-regulated binding, number of genes with down-regulated binding, fraction of differentially bound genes relative to all genes with nonzero coverage at this motif, mean and s.e.m. of occupancy log2 fold change across differentially bound genes, a p-value from a t-test of these log2 fold changes against 0, mean and s.e.m. of occupancy log 2 fold change across all genes, and lists of up- and down-regulated genes. 
+This script collects the DESeq2 output in ``mirca_deseq2_results`` and selects significant events. An empirical FDR for selecting significant events (specified with ``-a``, default: 0.05) can be calculated by specifying the output directory of a control run using ``-c mirca_deseq2_control``, otherwise DESeq2 adjusted p-values are used. Events per motif are combined and statistics collected: number of genes with up-regulated binding, number of genes with down-regulated binding, fraction of differentially bound targets (diff. bound genes relative to all genes with nonzero coverage at this motif), mean and s.e.m. of occupancy log2 fold change across differentially bound genes, a p-value from a t-test of these log2 fold changes against 0, mean and s.e.m. of occupancy log 2 fold change across all genes, and lists of up- and down-regulated genes. 
 
 If ``-f output_plot.pdf -t plot_title`` are added, this script also produces a summary plot.
