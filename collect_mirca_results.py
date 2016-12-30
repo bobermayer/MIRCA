@@ -4,12 +4,15 @@ import numpy as np
 import pandas as pd
 import scipy.stats
 from optparse import OptionParser
+from matplotlib import pyplot as plt
 
 parser=OptionParser()
 parser.add_option('-i','--indir',dest='indir',help="""directory with deseq2 output files (from run_deseq2_for_mirca.R)""")
 parser.add_option('-c','--indir_control',dest='indir_control',help="""directory with deseq2 output files for control run""")
 parser.add_option('-a','--alpha',dest='alpha',default=0.05,type=float,help="""significance cutoff [0.05]""")
 parser.add_option('-o','--outf',dest='outf',help="""output file [stdout]""")
+parser.add_option('-f','--fig',dest='fig',help="""figure output [None]""")
+parser.add_option('-t',dest='title',default='MIRCA stats',help="""title for figure""")
 
 options,args=parser.parse_args()
 
@@ -53,26 +56,36 @@ else:
 
 	print >> sys.stderr, "found {0} differential binding events at {1:.0f}% FDR".format(nsig,100*options.alpha)
 
-def collect_stats (df):
+def collect_stats (df, pc):
 
 	""" helper function to aggregate binding events for each motif """
 
-	up=df['log2FoldChange'] < 0
-	down=df['log2FoldChange'] > 0
+	# all significant events
+	sig=df['pvalue'] < pc
+	# all upregulated events
+	up=df['log2FoldChange'] > 0
+	# all downregulated events
+	down=df['log2FoldChange'] < 0
+	# all bound events (with coverage > 0)
+	bound=df['baseMean'] > 0
 
-	return pd.Series([up.sum(),\
-					  down.sum(),\
+	return pd.Series([(up & sig).sum(),\
+					  (down & sig).sum(),\
+					  sig.sum()/float(bound.sum()),\
+					  df[sig]['log2FoldChange'].mean(),\
+					  df[sig]['log2FoldChange'].sem(),\
+					  scipy.stats.ttest_1samp(df[sig]['log2FoldChange'],0)[1],\
 					  df['log2FoldChange'].mean(),\
 					  df['log2FoldChange'].sem(),\
-					  scipy.stats.ttest_1samp(df['log2FoldChange'],0)[1],\
-					  ','.join(zip(*df[up].index.tolist())[0]) if up.sum() > 0 else '',\
-					  ','.join(zip(*df[down].index.tolist())[0]) if down.sum() > 0 else ''],\
-					 index=['nup','ndown','lfc_mean','lfc_sem','lfc_pval','genes_up','genes_down'])
+					  ','.join(zip(*df[sig & up].index.tolist())[0]) if (sig & up).sum() > 0 else '',\
+					  ','.join(zip(*df[sig & down].index.tolist())[0]) if (sig & down).sum() > 0 else ''],\
+					 index=['nup_sig','ndown_sig','frac_sig','lfc_mean_sig','lfc_sem_sig','lfc_pval_sig','lfc_mean_all','lfc_sem_all','genes_up','genes_down'])
 
-events=deseq2_results.stack(level=0,dropna=True)
-sig_events=events[events['pvalue'] < pc]
-events_by_motif=sig_events.groupby(level=1)
-motif_stats=events_by_motif.apply(collect_stats)
+
+events_by_motif=deseq2_results.stack(level=0,dropna=True).groupby(level=1)
+motif_stats=events_by_motif.apply(lambda df: collect_stats (df, pc))
+
+order=(motif_stats['nup_sig']+motif_stats['ndown_sig']).sort_values().index
 
 if options.outf is not None:
 	print >> sys.stderr, 'writing to '+options.outf
@@ -81,3 +94,58 @@ else:
 	print >> sys.stderr, 'writing to stdout'
 	motif_stats.to_csv(sys.stdout,sep='\t')
 	
+if options.fig is not None:
+
+	fig=plt.figure(1,figsize=(8,10))
+	fig.clf()
+
+	ax=fig.add_axes([.35,.05,.25,.92])
+	ax.barh(np.arange(len(order)),motif_stats.ix[order,'nup_sig'],color='r',label='up')
+	ax.barh(np.arange(len(order)),motif_stats.ix[order,'ndown_sig'],left=motif_stats.ix[order,'nup_sig'],color='b',label='down')
+	ax.set_yticks(np.arange(len(order))+.4)
+	ax.set_yticklabels(order,size=6,ha='right',va='center')
+	ax.set_xlabel('diff. bound genes')
+	ax.set_ylim([-.4,len(order)+.4])
+	ax.set_xlim([0,1.1*max(map(abs,ax.get_xlim()))])
+	ax.locator_params(axis='x',nbins=5)
+	ax.grid(axis='x')
+	ax.legend(loc=4,prop={'size':10})
+	ax.spines['top'].set_visible(False)
+	ax.spines['right'].set_visible(False)
+	ax.get_xaxis().tick_bottom()
+	ax.get_yaxis().tick_left()
+
+	ax=fig.add_axes([.62,.05,.15,.92])
+	ax.barh(np.arange(len(order)),100*motif_stats.ix[order,'frac_sig'],color='g')
+	ax.set_yticks(np.arange(len(order))+.4)
+	ax.set_yticklabels([])
+	ax.set_xlabel('% of targets')
+	ax.set_ylim([-.4,len(order)+.4])
+	ax.set_xlim([0,1.1*max(ax.get_xlim())])
+	ax.locator_params(axis='x',nbins=3)
+	ax.grid(axis='x')
+	ax.spines['top'].set_visible(False)
+	ax.spines['right'].set_visible(False)
+	ax.get_xaxis().tick_bottom()
+	ax.get_yaxis().tick_left()
+
+	ax=fig.add_axes([.8,.05,.15,.92])
+	ax.barh(np.arange(len(order)),motif_stats.ix[order,'lfc_mean_sig'],xerr=motif_stats.ix[order,'lfc_sem_sig'],color='k',height=.8)
+	ax.barh(np.arange(len(order))+.2,motif_stats.ix[order,'lfc_mean_all'],color='Gray',height=.4)
+	ax.set_yticks(np.arange(len(order))+.4)
+	ax.set_yticklabels([])
+	ax.set_xlabel('occupancy log2 FC')
+	ax.set_ylim([-.4,len(order)+.4])
+	ax.set_xlim([-1.1*max(map(abs,ax.get_xlim())),1.1*max(map(abs,ax.get_xlim()))])
+	ax.locator_params(axis='x',nbins=5)
+	ax.grid(axis='x')
+	ax.spines['top'].set_visible(False)
+	ax.spines['right'].set_visible(False)
+	ax.get_xaxis().tick_bottom()
+	ax.get_yaxis().tick_left()
+
+	fig.suptitle(options.title,size=10,y=.99)
+
+	print >> sys.stderr, 'saving figure to '+options.fig
+	fig.savefig(options.fig)
+
