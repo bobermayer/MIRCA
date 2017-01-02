@@ -6,7 +6,6 @@ import bisect
 import gzip
 import pysam
 import subprocess
-from Bio import SeqIO
 from string import maketrans
 from optparse import OptionParser
 
@@ -245,10 +244,12 @@ if __name__ == '__main__':
 		outf.write('\tcov_{0}'.format(names[n]))
 	outf.write('\n')
 
-	if 'gtf' in options.inf:
+	if '.gtf' in options.inf:
 		get_regions = get_regions_from_gtf
-	else:
+	elif '.bed' in options.inf:
 		get_regions = get_regions_from_bed
+	else:
+		raise Exception("cannot recognize format of {0}!".format(options.inf))
 
 	if options.inf.endswith('.gz'):
 		inf=gzip.open(options.inf,'rb')
