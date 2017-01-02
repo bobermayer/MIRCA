@@ -5,7 +5,6 @@ import pandas as pd
 import bisect
 import gzip
 import pysam
-import subprocess
 from string import maketrans
 from optparse import OptionParser
 
@@ -222,6 +221,8 @@ if __name__ == '__main__':
 	nmapped=np.array([pysam.Samfile(bam,'rb').mapped for bam in bam_files])
 	nB=len(bam_files)
 
+	genome=pysam.FastaFile(options.genome)
+
 	print >> sys.stderr, 'counts in {0} from '.format(options.region)+options.inf
 
 	if options.names is not None:
@@ -272,13 +273,11 @@ if __name__ == '__main__':
 
 		for start,end in region_exons:
 			# get read coverage using samtools mpileup
-			proc=subprocess.Popen(['samtools','mpileup']+bam_files+['-f',options.genome,'-r',chrom+':'+str(start+1)+'-'+str(end),'-d',str(options.max_depth)],stdout=subprocess.PIPE)
 			cov=np.zeros((end-start,nB),dtype=np.int)
-			while True:
-				line=proc.stdout.readline()
+			for line in pysam.mpileup(*(bam_files+['-f',options.genome,'-r',chrom+':'+str(start+1)+'-'+str(end),'-d',str(options.max_depth)])).split('\n'):
 				if line=='':
 					break
-				ls=line.strip('\n').split('\t')
+				ls=line.split('\t')
 				pos=int(ls[1])-1
 				ref=ls[2]
 				if pos < start or pos > end-1:
@@ -292,8 +291,7 @@ if __name__ == '__main__':
 					cov[pos-start]=np.array([int(ls[3*(n+1)]) for n in range(nB)])
 			covs.append(cov)
 			# get sequence for the entire region (even where there is no coverage)
-			proc=subprocess.Popen(['samtools','faidx']+[options.genome,chrom+':'+str(start+1)+'-'+str(end)],stdout=subprocess.PIPE)
-			seq=str(SeqIO.read(proc.stdout,'fasta').seq).upper()
+			seq=genome.fetch(reference=chrom,start=start,end=end).upper()
 			seqs.append(seq)
 
 		# combine exons for utr3/utr5/cds/tx
