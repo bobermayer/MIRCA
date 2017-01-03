@@ -187,7 +187,7 @@ if __name__ == '__main__':
 	parser.add_option('-i','--inf',dest='inf',help="either: 12-column bed file with transcript definitions; or GTF file")
 	parser.add_option('-B','--bam',dest='bam',help="comma-separated list of BAM files with mapped reads, should have indices")
 	parser.add_option('-K','--K',dest='K',default=7,help="k-mers to analyze [7]",type=int)
-	parser.add_option('-E','--E',dest='E',default=5,help="extend k-mer regions by E nucleotides [5]",type=int)
+	parser.add_option('-E','--E',dest='E',default=0,help="extend k-mer regions by E nucleotides [0]",type=int)
 	parser.add_option('-f','--flank_len',dest='flank_len',default=100,type=int,help="length of intron flanks [100]")
 	parser.add_option('-r','--region',dest='region',default='utr3',help="which region to use (utr5/cds/utr3/tx/intron_up/intron_down) [utr3]")
 	parser.add_option('-n','--names',dest='names',default=None,help="header names for bam files (comma-separated)")
