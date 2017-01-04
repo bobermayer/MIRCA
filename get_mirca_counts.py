@@ -272,6 +272,8 @@ if __name__ == '__main__':
 		seqs=[]
 
 		for start,end in region_exons:
+			if end <= start:
+				continue
 			# get read coverage using samtools mpileup
 			cov=np.zeros((end-start,nB),dtype=np.int)
 			for line in pysam.mpileup(*(bam_files+['-f',options.genome,'-r',chrom+':'+str(start+1)+'-'+str(end),'-d',str(options.max_depth)])).split('\n'):
