@@ -6,6 +6,7 @@ import bisect
 import gzip
 import pysam
 from string import maketrans
+from collections import defaultdict
 from optparse import OptionParser
 
 def RC (s):
@@ -82,33 +83,27 @@ def get_regions_from_gtf(gtf_file,flank_len=100):
 
 	""" parse gencode-style gtf file and extract exons, CDS, UTRs and intron flanks """
 
-	def get_exons (lines, flank_len):
+	def get_exons (gene, lines, flank_len):
 
 		""" extract regions from a bunch of lines belonging to one gene """
 
 		all_exons=[]
 		cds_exons=[]
 		utr_exons=[]
-		names=set([])
 		chroms=set([])
 		strands=set([])
 
-		for line in lines:
-
-			ls=line.strip().split('\t')
+		for ls in lines:
 
 			info=dict((x.split()[0].strip(),x.split()[1].strip().strip('"')) for x in ls[8].strip(';').split(";"))
-			name=info['gene_id']
 			chrom=ls[0]
 			strand=ls[6]
 			
-			names.add(name)
 			chroms.add(chrom)
 			strands.add(strand)
 
-			if ls[2]=='gene':
-				raise Exception("this shouldn't happen!")
-			elif ls[2]=='CDS':
+			# extract CDS, UTR and exon lines for this gene
+			if ls[2]=='CDS':
 				cds_exons.append((int(ls[3])-1,int(ls[4])))
 			elif ls[2]=='UTR':
 				utr_exons.append((int(ls[3])-1,int(ls[4])))
@@ -116,11 +111,11 @@ def get_regions_from_gtf(gtf_file,flank_len=100):
 			if ls[2]=='exon' and (info['gene_type']!='protein_coding' or info['transcript_type']=='protein_coding'):
 				all_exons.append((int(ls[3])-1,int(ls[4])))
 
-		if len(names)!=1 or len(chroms)!=1 or len(strands)!=1:
-			raise Exception("more than one gene or chrom or strand in lines")
+		if len(chroms)!=1 or len(strands)!=1:
+			raise Exception("more than one chrom or strand in lines")
 
 		if len(cds_exons)==0:
-			return (names.pop(),chroms.pop(),strands.pop(),[])
+			return (gene, chroms.pop(), strands.pop(), [])
 
 		min_CDS=min(start for start,_ in cds_exons)
 		max_CDS=max(end for _,end in cds_exons)
@@ -155,31 +150,26 @@ def get_regions_from_gtf(gtf_file,flank_len=100):
 			utr5_exons,utr3_exons=utr3_exons,utr5_exons
 			intron_up_flanks,intron_down_flanks=intron_down_flanks,intron_up_flanks
 
-		return (names.pop(),chroms.pop(),strands.pop(),{'utr3':merge_intervals(utr3_exons),\
-														'utr5':merge_intervals(utr5_exons),\
-														'cds':merge_intervals(cds_exons),\
-														'tx':merged_exons,\
-														'intron_up':intron_up_flanks,\
-														'intron_down':intron_down_flanks})
+		return (gene, chroms.pop(), strands.pop(),{'utr3':merge_intervals(utr3_exons),\
+												   'utr5':merge_intervals(utr5_exons),\
+												   'cds':merge_intervals(cds_exons),\
+												   'tx':merged_exons,\
+												   'intron_up':intron_up_flanks,\
+												   'intron_down':intron_down_flanks})
 
-	lines=[]
+	gene_lines=defaultdict(list)
 	for line in gtf_file:
 
 		if line.startswith('#'):
 			continue
 
 		ls=line.strip().split("\t")
+		info=dict((x.split()[0].strip(),x.split()[1].strip().strip('"')) for x in ls[8].strip(';').split(";"))
+		name=info['gene_id']
+		gene_lines[name].append(ls)
 
-		if ls[2]=='gene':
-			if len(lines) > 0:
-				yield get_exons(lines,flank_len)
-				lines=[]
-		else:
-			lines.append(line)
-
-	if len(lines) > 0:
-		yield get_exons(lines,flank_len)
-		lines=[]
+	for gene,lines in gene_lines.iteritems():
+		yield get_exons(gene,lines,flank_len)
 
 if __name__ == '__main__':
 
@@ -347,3 +337,6 @@ if __name__ == '__main__':
 					outf.write("{0}\t{1}\t".format(name,kmer)+'\t'.join('{0:.0f}'.format(v) for v in vals)+'\n')
 
 	print >> sys.stderr, 'done ({0} skipped)'.format(nskipped)
+
+	if outf is not sys.stdout:
+		outf.close()
