@@ -61,7 +61,12 @@ for (mot in all.motifs) {
     dds <- DESeqDataSetFromMatrix(counts.here.df, colData, ~ condition + motif + condition:motif)
     dds$motif <- factor(dds$motif, levels=c('tot',mot))
     sizeFactors(dds) <- c(sf.tot,sf.tot)
-    dds <- DESeq(dds, test='LRT', reduced=~condition+motif)
-    res <- results(dds,alpha=options$alpha)
-    write.csv(as.data.frame(res),file=file.path(options$outdir,paste('deseq2_results_',mot,'.csv',sep='')))
+    tryCatch({
+      dds <- DESeq(dds, test='LRT', reduced=~condition+motif)
+      res <- results(dds,alpha=options$alpha)
+      write.csv(as.data.frame(res),file=file.path(options$outdir,paste('deseq2_results_',mot,'.csv',sep='')))
+    }, error=function(err) {
+      print(paste('skipping',mot,'due to error:',err))
+    })
 }  
+
