@@ -1,6 +1,7 @@
-library('optparse')
-library(DESeq2)
-library('data.table')
+suppressPackageStartupMessages({
+require('optparse')
+require(DESeq2)
+require('data.table')})
 
 option_list <- list(
   make_option(c("-i","--input"),type="character",help="input file (from get_mirca_read_counts.py)",metavar="file"),
