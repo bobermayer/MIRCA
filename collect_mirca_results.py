@@ -4,7 +4,10 @@ import numpy as np
 import pandas as pd
 import scipy.stats
 from optparse import OptionParser
+import matplotlib
 from matplotlib import pyplot as plt
+
+matplotlib.use('Agg')
 
 parser=OptionParser()
 parser.add_option('-i','--indir',dest='indir',help="""directory with deseq2 output files (from run_deseq2_for_mirca.R)""")
