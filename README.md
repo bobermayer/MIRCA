@@ -23,15 +23,15 @@ python get_mirca_read_counts.py \
 ```
 Conversion events instead of reads are counted when using ``-T``. More readable names for files can be given with ``-n "condition1_1,condition1_2,condition2_1,condition2_2"``, otherwise bam file names are used. Additional options can be explored using ``python get_mirca_read_counts.py -h``, e.g., the intron flank length can be adjusted using ``-f`` (default: 100nt), and Kmer windows can be extended by ``n`` nucleotides using ``-E n``.
 
-### 2. (optional) cluster count profiles for different motifs or Kmers
+### 2. (optional) cluster count profiles 
 ```
 python cluster_count_profiles.py \
 	-i mirca_counts.out \
 	-o mirca_counts_clustered.out
 ```
-Count profiles over genes and conditions for clusters of motifs (or Kmers) defined via hierarchical clustering are added up. The clustering metric and method can be specified with ``--metric`` and ``--method``, respectively, as well as other arguments to ``scipy.cluster.hierarchy.fcluster``. If an argument is provided to ``--fig``, this script also plots the associated dendrogram and does a very simple calculation of cluster consensus sequences by aligning with ``clustalw2`` (if motifs are clustered, motif definitions used for ``get_mirca_read_counts.py`` need to be provided with ``--motif_definitions``). The top 40% of genes (by total counts) can be selecting ``--quantile 0.6``.
+Count profiles over genes and conditions for clusters of motifs (or Kmers) defined via hierarchical clustering are added up. Cluster members are written within in comments in the header section of the output file, which would then be used in step 3 instead of ``mirca_counts.out``. The clustering metric and method can be specified with ``--metric`` and ``--method``, respectively, as well as other arguments to ``scipy.cluster.hierarchy.fcluster``. If an argument is provided to ``--fig``, this script also plots the associated dendrogram and does a very simple calculation of cluster consensus sequences by aligning with ``clustalw2`` (if motifs containing Kmers are clustered, motif definitions used for ``get_mirca_read_counts.py`` need to be provided with ``--motif_definitions``). The top 40% of genes (by total counts) can be selecting ``--quantile 0.6``.
 
-**Note**: This script can take a lot of memory and computing time (linear in the number of genes times number of conditions, and quadratic in the number of motifs/Kmers), and will likely require some manual parameter tuning by the user to provide meaningful cluster selection.
+**Note**: This script can take a lot of memory and computing time (linear in the number of genes times number of conditions, and quadratic in the number of motifs/Kmers), and will likely require some manual parameter tuning by the user to give meaningful clusters.
 
 ### 3. run DESeq2
 ``` 
@@ -44,7 +44,6 @@ Here, ``-o`` is an output directory (will be created if it doesn't exists) with 
 
 A control run with permuted labels can be performed like this:
 `` Rscript run_deseq2_for_mirca.R -i mirca_counts.out -o mirca_deseq2_control -c condition1,condition2,condition1,condition2 ``
-
 
 ### 4. collect results
 ``` 

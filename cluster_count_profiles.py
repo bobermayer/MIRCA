@@ -15,7 +15,7 @@ parser.add_option('-o','--counts_out',dest='counts_out',default="clustered_count
 parser.add_option('','--method',dest='method',default='ward',\
 				  help="""clustering method (one of single, complete, average, weighted, ward, centroid, median) [ward]""")
 parser.add_option('','--metric',dest='metric',default='correlation',\
-				  help="""distance metric (as in scipy.distance.pdist) [correlation]""")
+				  help="""distance metric (used by fastcluster) [correlation]""")
 parser.add_option('','--t',dest='t',\
 				  help="""cutoff for scipy.cluster.hierarchy.fcluster [0.7*max(Z[:,2])]""")
 parser.add_option('','--criterion',dest='criterion',default='distance',\
@@ -42,10 +42,6 @@ with open(options.counts_in) as inf:
 			comments.append(line)
 	counts=pd.read_csv(inf,header=None,index_col=[0,1],names=columns,sep='\t')
 
-#################
-### EDIT HERE ###
-# motifs=np.random.choice(np.setdiff1d(counts.index.get_level_values(1).unique(),['tot']),1000)
-#################
 motifs=np.setdiff1d(counts.index.get_level_values(1).unique(),['tot'])
 conditions=counts.columns
 	
