@@ -1,5 +1,6 @@
 import os
 import sys
+import gzip
 import numpy as np
 import pandas as pd
 import scipy.stats
@@ -90,7 +91,7 @@ if options.indir_control is not None:
 	pvals=deseq2_results.xs('pvalue',axis=1,level=1)
 	pvals_c=deseq2_control.xs('pvalue',axis=1,level=1)
 
-	qvals = pd.DataFrame(get_empirical_fdr (pvals, pvals_c),index=pvals.index,columns=pvals.columns)
+	qvals = pd.DataFrame(get_empirical_qval (pvals, pvals_c),index=pvals.index,columns=pvals.columns)
 
 else:
 
@@ -182,4 +183,8 @@ if options.fig is not None:
 # flatten hierarchical index and write output
 deseq2_results.columns=['.'.join(c) for c in deseq2_results.columns.tolist()]
 print >> sys.stderr, 'writing full output to '+(options.outf if options.outf is not sys.stdout else 'stdout')
-deseq2_results.to_csv(options.outf,sep='\t')
+if options.outf.endswith('.gz'):
+	with gzip.open(options.outf,'wb') as outf:
+		deseq2_results.to_csv(outf,sep='\t')
+else:
+	deseq2_results.to_csv(options.outf,sep='\t')

@@ -47,7 +47,7 @@ A control run with permuted labels can be performed like this:
 
 ### 4. collect results
 ``` 
-python collect_mirca_results.py -i mirca_deseq2_results -o mirca_results_full.tsv -s mirca_results_summary.tsv
+python collect_mirca_results.py -i mirca_deseq2_results -o mirca_results_full.tsv(.gz) -s mirca_results_summary.tsv
 ```
 
 This script collects the DESeq2 output in ``mirca_deseq2_results`` and determines globally significant events. An empirical FDR for selecting significant events (specified with ``-a``, default: 0.05) can be calculated by specifying the output directory of a control run using ``-c mirca_deseq2_control``, otherwise p-values for all genes and all motifs are globally adjusted using the BH method. All results are written to ``mirca_results_full.tsv``. 
