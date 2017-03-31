@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import numpy as np
 import pandas as pd
 import bisect
@@ -214,29 +215,23 @@ if __name__ == '__main__':
 
 	genome=pysam.FastaFile(options.genome)
 
-	if options.bam is None:
-		nB=0
-		print >> sys.stderr, 'no bam files given. counting motif occurrences in sequence'
+	print >> sys.stderr, 'using bam files',options.bam
+	bam_files=[bam.strip() for bam in options.bam.split(',')]
+	nB=len(bam_files)
+	nmapped=np.array([pysam.Samfile(bam,'rb').mapped for bam in bam_files])
+	if options.names is not None:
+		names=dict((n,x.strip()) for n,x in enumerate(options.names.split(',')))
+		if len(names)!=nB:
+			raise Exception("number of header names doesn't match number of bam files")
 	else:
-		print >> sys.stderr, 'using bam files',options.bam
-		bam_files=[bam.strip() for bam in options.bam.split(',')]
-		nB=len(bam_files)
-		nmapped=np.array([pysam.Samfile(bam,'rb').mapped for bam in bam_files])
-		if options.names is not None:
-			names=dict((n,x.strip()) for n,x in enumerate(options.names.split(',')))
-			if len(names)!=nB:
-				raise Exception("number of header names doesn't match number of bam files")
-		else:
-			names=dict(zip(range(nB),range(1,nB+1)))
-		outf.write('# bam files:\n')
-		for n in range(nB):
-			outf.write('#  {0}: {1} ({2} reads)\n'.format(names[n],options.bam.split(',')[n],nmapped[n]))
+		names=dict(zip(range(nB),range(1,nB+1)))
+	outf.write('# bam files:\n')
+	for n in range(nB):
+		outf.write('#  {0}: {1} ({2} reads)\n'.format(names[n],options.bam.split(',')[n],nmapped[n]))
 
-	outf.write('gene\t{0}'.format('motif' if use_motifs else 'kmer'))
+	outf.write('gene\t{0}\tcount'.format('motif' if use_motifs else 'kmer'))
 	for n in range(nB):
 		outf.write('\tcov_{0}'.format(names[n]))
-	if nB==0:
-		outf.write('\tcount')
 	outf.write('\n')
 
 	if '.gtf' in options.inf:
@@ -270,22 +265,26 @@ if __name__ == '__main__':
 				continue
 			# get read coverage using samtools mpileup
 			cov=np.zeros((end-start,nB),dtype=np.int)
-			if nB > 0:
-				for line in pysam.mpileup(*(bam_files+['-f',options.genome,'-r',chrom+':'+str(start+1)+'-'+str(end),'-d',str(options.max_depth)])).split('\n'):
-					if line=='':
-						break
-					ls=line.split('\t')
-					pos=int(ls[1])-1
-					ref=ls[2]
-					if pos < start or pos > end-1:
-						raise Exception("unknown position in mpileup")
-					if options.use_TC:
-						if strand=='+' and ref in 'Tt':
-							cov[pos-start]=np.array([ls[3*(n+1)+1].count('C')+ls[3*(n+1)+1].count('c') for n in range(nB)])
-						elif strand=='-' and ref in 'Aa':
-							cov[pos-start]=np.array([ls[3*(n+1)+1].count('G')+ls[3*(n+1)+1].count('g') for n in range(nB)])
+			for line in pysam.mpileup(*(bam_files+['-f',options.genome,'-r',chrom+':'+str(start+1)+'-'+str(end),'-d',str(options.max_depth)])).split('\n'):
+				if line=='':
+					break
+				ls=line.split('\t')
+				pos=int(ls[1])-1
+				ref=ls[2]
+				if pos < start or pos > end-1:
+					raise Exception("unknown position in mpileup")
+				if options.use_TC:
+					# count only T/C mismatches
+					if strand=='+' and ref in 'Tt':
+						cov[pos-start]=np.array([ls[3*(n+1)+1].count('C') for n in range(nB)])
+					elif strand=='-' and ref in 'Aa':
+						cov[pos-start]=np.array([ls[3*(n+1)+1].count('g') for n in range(nB)])
+				else:
+					# here count all reads mapping to the correct strand
+					if strand=='+':
+						cov[pos-start]=np.array([len(re.findall('[\.ACGTN]',ls[3*(n+1)+1])) for n in range(nB)])
 					else:
-						cov[pos-start]=np.array([int(ls[3*(n+1)]) for n in range(nB)])
+						cov[pos-start]=np.array([len(re.findall('[\,acgtn]',ls[3*(n+1)+1])) for n in range(nB)])
 			covs.append(cov)
 			# get sequence for the entire region (even where there is no coverage)
 			seq=genome.fetch(reference=chrom,start=start,end=end).upper()
@@ -308,61 +307,37 @@ if __name__ == '__main__':
 			raise Exception("lengths don't match!")
 
 		# don't consider this gene or transcript if there is no sequence or no coverage
-		if sum(exon_length) < K or (nB > 0 and sum(map(lambda x: x.sum(),covs))==0):
+		if sum(exon_length) < K or sum(map(lambda x: x.sum(),covs))==0:
 			nskipped+=1
 			continue
 
-		if nB > 0:
-
-			# get coverage for each kmer in each region
-			kmer_cov=[]
-			for i in range(nexons):
-				for k in range(exon_length[i]-K+1):
-					if np.all(covs[i][k:k+K].sum(axis=0)==0):
-						continue
-					if options.use_TC:
-						# use actual number of T->C conversions in that region
-						kmer_cov.append([seqs[i][k:k+K]]+[covs[i][max(k-E,0):min(k+K+E,exon_length[i]),n].sum() for n in range(nB)])
-					else:
-						# use mean read count over stretch of length K+2*E
-						kmer_cov.append([seqs[i][k:k+K]]+[covs[i][max(k-E,0):min(k+K+E,exon_length[i]),n].mean() for n in range(nB)])
-				kmer_cov.append(['tot']+list(covs[i].sum(axis=0)))
-
-			if len(kmer_cov) > 0:
-				# sum kmer coverage over all occurrences of the kmer
-				tot_kmer_cov=pd.DataFrame(kmer_cov, columns=['kmer']+map(lambda x: 'cov_{0}'.format(names[x]),range(nB))).groupby('kmer').sum()
-				if use_motifs:
-					# sum over all kmers for this motif
-					tot_motif_cov=tot_kmer_cov.join(motifs).groupby('motif').sum()
-					tot_motif_cov.loc['tot']=tot_kmer_cov.loc['tot']
-					# print counts as integer
-					for motif,vals in tot_motif_cov.iterrows():
-						outf.write("{0}\t{1}\t".format(name,motif)+'\t'.join('{0:.0f}'.format(v) for v in vals)+'\n')
+		# get count and coverage for each kmer in each region
+		kmer_cov=[]
+		for i in range(nexons):
+			for k in range(exon_length[i]-K+1):
+				if options.use_TC:
+					# use actual number of T->C conversions in that region
+					kmer_cov.append([seqs[i][k:k+K]]+[1]+[covs[i][max(k-E,0):min(k+K+E,exon_length[i]),n].sum() for n in range(nB)])
 				else:
-					# print counts as integer
-					for kmer,vals in tot_kmer_cov.iterrows():
-						outf.write("{0}\t{1}\t".format(name,kmer)+'\t'.join('{0:.0f}'.format(v) for v in vals)+'\n')
+					# use mean read count over stretch of length K+2*E
+					kmer_cov.append([seqs[i][k:k+K]]+[1]+[covs[i][max(k-E,0):min(k+K+E,exon_length[i]),n].mean() for n in range(nB)])
+			kmer_cov.append(['tot']+[sum(exon_length)]+list(covs[i].sum(axis=0)))
 
+		# sum kmer counts and coverage over all occurrences of the kmer
+		tot_kmer_cov=pd.DataFrame(kmer_cov, columns=['kmer','count']+map(lambda x: 'cov_{0}'.format(names[x]),range(nB))).groupby('kmer').sum()
+
+		# print motif occurrences and coverage counts as integer
+		if use_motifs:
+			# sum over all kmers for this motif
+			tot_motif_cov=tot_kmer_cov.join(motifs).groupby('motif').sum()
+			tot_motif_cov.loc['tot']=tot_kmer_cov.loc['tot']
+			for motif,vals in tot_motif_cov.iterrows():
+				outf.write("{0}\t{1}\t".format(name,motif)\
+						   +'\t'.join('{0:.0f}'.format(v) for v in vals)+'\n')
 		else:
-
-			# get kmer counts in sequence
-			tot_kmer_counts=Counter(seqs[i][k:k+K] for i in range(nexons) for k in range(exon_length[i]-K+1))
-			# get total length as motif "length"
-			tot_kmer_counts['length']=sum(exon_length)
-
-			tot_kmer_counts=pd.DataFrame(tot_kmer_counts.values(),columns=['count'],index=tot_kmer_counts.keys())
-
-			if use_motifs:
-				# sum over all kmers for this motif
-				tot_motif_counts=tot_kmer_counts.join(motifs).groupby('motif').sum()
-				tot_motif_counts.loc['length']=tot_kmer_counts.loc['length']
-				# print counts
-				for motif,vals in tot_motif_counts.iterrows():
-					outf.write("{0}\t{1}\t{2}\n".format(name,motif,vals['count']))
-			else:
-				# print counts
-				for kmer,vals in tot_kmer_counts.iterrows():
-					outf.write("{0}\t{1}\t{2}\n".format(name,kmer,vals['count']))
+			for kmer,vals in tot_kmer_cov.iterrows():
+				outf.write("{0}\t{1}\t".format(name,kmer)\
+						   +'\t'.join('{0:.0f}'.format(v) for v in vals)+'\n')
 
 	print >> sys.stderr, 'done ({0} skipped)'.format(nskipped)
 

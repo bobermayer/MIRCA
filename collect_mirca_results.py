@@ -69,10 +69,11 @@ parser=OptionParser()
 parser.add_option('-i','--indir',dest='indir',help="""directory with deseq2 output files (from run_deseq2_for_mirca.R)""")
 parser.add_option('-c','--indir_control',dest='indir_control',help="""directory with deseq2 output files for control run""")
 parser.add_option('-a','--alpha',dest='alpha',default=0.05,type=float,help="""significance cutoff [0.05]""")
-parser.add_option('-o','--outf',dest='outf',help="""output file [stdout]""")
+parser.add_option('-o','--outf',dest='outf',help="""output file""")
 parser.add_option('-s','--summary',dest='summary',help="""summary output [None]""")
 parser.add_option('-f','--fig',dest='fig',help="""figure output [None]""")
 parser.add_option('-t',dest='title',default='MIRCA stats',help="""title for figure""")
+parser.add_option('','--motif_definitions',dest='motif_definitions',help="""file with motif_definitions for logo generation""")
 
 options,args=parser.parse_args()
 
@@ -120,16 +121,50 @@ if options.fig is not None:
 
 	order=(motif_stats['nup_sig']+motif_stats['ndown_sig']).sort_values().index
 
-	fig=plt.figure(1,figsize=(8,10))
+	figheight=.15*len(order)+1
+	figwidth=6
+
+	left=.35
+	bottom=.4/figheight
+	height=1-.3/figheight-bottom
+	width=.19
+	wspace=.02
+	aspect=.1*left*len(order)/height
+
+	if options.motif_definitions is not None:
+
+		import subprocess
+		import StringIO
+		from matplotlib import image as mpimg
+
+		print >> sys.stderr, 'creating sequence logos using motif definitions from '+options.motif_definitions
+		motif_kmers=dict((line.split()[0],line.split()[1].split(',')) for line in open(options.motif_definitions))
+
+		motif_images={}
+		for n,motif in enumerate(order):
+
+			kmers=motif_kmers[motif]
+			seqs='\n'.join('>seq_{0}.format(n)\n{1}'.format(n,s) for n,s in enumerate(kmers))
+			mout,merr=subprocess.Popen(['muscle'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate(seqs)
+			wout,werr=subprocess.Popen(['weblogo','-F','png_print','-A','dna','-X','no','-Y','no','-P','','-c','classic','--errorbars','no','--aspect-ratio',str(aspect)],\
+									   stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate(mout)
+			#wout,werr=subprocess.Popen(['weblogo','-F','png_print','-A','dna','-X','no','-Y','no','-P','','-c','classic','--errorbars','no','--aspect-ratio',str(aspect),'--scale-width','no','-U','probability'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate(mout)
+			motif_images[motif]=mpimg.imread(StringIO.StringIO(wout))
+
+	else:
+
+		motif_images={}
+
+	fig=plt.figure(1,figsize=(figwidth,figheight))
 	fig.clf()
 
-	ax=fig.add_axes([.37,.08,.2,.89])
+	ax=fig.add_axes([left,bottom,width,height])
 	ax.barh(np.arange(len(order)),motif_stats.ix[order,'nup_sig'],color='r',label='up',lw=0)
 	ax.barh(np.arange(len(order)),motif_stats.ix[order,'ndown_sig'],left=motif_stats.ix[order,'nup_sig'],color='b',label='down',lw=0)
 	ax.set_yticks(np.arange(len(order))+.4)
-	ax.set_yticklabels(order,size=6,ha='right',va='center')
+	ax.set_yticklabels([o if len(o) < 15 else o[:12]+'...' for o in order],size=8,ha='right',va='center')
 	ax.set_xlabel('diff. bound genes',size=8)
-	ax.set_ylim([-.4,len(order)+.2])
+	ax.set_ylim([0,len(order)-.2])
 	ax.set_xlim([0,1.1*max(map(abs,ax.get_xlim()))])
 	ax.locator_params(axis='x',nbins=5)
 	ax.tick_params(axis='x', which='major', labelsize=8)
@@ -138,16 +173,17 @@ if options.fig is not None:
 	ax.spines['right'].set_visible(False)
 	ax.get_xaxis().tick_bottom()
 	ax.get_yaxis().tick_left()
-	leg=ax.legend(loc=3,prop={'size':8},ncol=2,bbox_to_anchor=(0,-.09),title='occupancy')
+
+	leg=ax.legend(loc=4,prop={'size':8},title='occupancy')
 	leg.get_title().set_fontsize(8)
 	leg.get_frame().set_ec('k')
 
-	ax=fig.add_axes([.59,.08,.18,.89])
+	ax=fig.add_axes([left+width+wspace,bottom,width,height])
 	ax.barh(np.arange(len(order)),100*motif_stats.ix[order,'frac_sig'],color='g',lw=0)
 	ax.set_yticks(np.arange(len(order))+.4)
 	ax.set_yticklabels([])
 	ax.set_xlabel('% targets',size=8)
-	ax.set_ylim([-.4,len(order)+.2])
+	ax.set_ylim([0,len(order)-.2])
 	ax.set_xlim([0,1.1*max(ax.get_xlim())])
 	ax.locator_params(axis='x',nbins=3)
 	ax.tick_params(axis='x', which='major', labelsize=8)
@@ -157,13 +193,13 @@ if options.fig is not None:
 	ax.get_xaxis().tick_bottom()
 	ax.get_yaxis().tick_left()
 
-	ax=fig.add_axes([.8,.08,.18,.89])
+	ax=fig.add_axes([left+2*(width+wspace),bottom,width,height])
 	ax.barh(np.arange(len(order)),motif_stats.ix[order,'lfc_mean_sig'],xerr=motif_stats.ix[order,'lfc_sem_sig'],color='m',height=.8,label='diff',ecolor='m',error_kw={'lw':.5},lw=0)
 	ax.barh(np.arange(len(order))+.1,motif_stats.ix[order,'lfc_mean_all'],color='DarkGray',height=.6,label='all',lw=0)
 	ax.set_yticks(np.arange(len(order))+.4)
 	ax.set_yticklabels([])
 	ax.set_xlabel('occupancy log2 FC',size=8)
-	ax.set_ylim([-.4,len(order)+.2])
+	ax.set_ylim([0,len(order)-.2])
 	ax.locator_params(axis='x',nbins=5)
 	ax.tick_params(axis='x', which='major', labelsize=8)
 	ax.grid(axis='x')
@@ -171,20 +207,28 @@ if options.fig is not None:
 	ax.spines['right'].set_visible(False)
 	ax.get_xaxis().tick_bottom()
 	ax.get_yaxis().tick_left()
-	leg=ax.legend(loc=3,prop={'size':8},ncol=2,bbox_to_anchor=(0,-.09),title='genes')
+
+	leg=ax.legend(loc=4,prop={'size':8},title='genes')
 	leg.get_title().set_fontsize(8)
 	leg.get_frame().set_ec('k')
 
-	fig.suptitle(options.title+' ({0:.0f}% FDR)'.format(100*options.alpha),size=8,y=.99)
+	for n,motif in enumerate(order):
+		if motif in motif_images:
+			ax=fig.add_axes([.01,bottom+n*height/len(order),.5*left,height/len(order)])
+			ax.imshow(motif_images[motif])
+			ax.set_axis_off()
+		
+	fig.suptitle(options.title+' ({0:.0f}% FDR)'.format(100*options.alpha),size=10,y=(1.+bottom+height)/2.,va='center')
 
 	print >> sys.stderr, 'saving figure to '+options.fig
-	fig.savefig(options.fig)
+	fig.savefig(options.fig,dpi=600)
 
-# flatten hierarchical index and write output
-deseq2_results.columns=['.'.join(c) for c in deseq2_results.columns.tolist()]
-print >> sys.stderr, 'writing full output to '+(options.outf if options.outf is not sys.stdout else 'stdout')
-if options.outf.endswith('.gz'):
-	with gzip.open(options.outf,'wb') as outf:
-		deseq2_results.to_csv(outf,sep='\t')
-else:
-	deseq2_results.to_csv(options.outf,sep='\t')
+if options.outf is not None:
+	# flatten hierarchical index and write output
+	deseq2_results.columns=['.'.join(c) for c in deseq2_results.columns.tolist()]
+	print >> sys.stderr, 'writing full output to '+options.outf
+	if options.outf.endswith('.gz'):
+		with gzip.open(options.outf,'wb') as outf:
+			deseq2_results.to_csv(outf,sep='\t')
+	else:
+		deseq2_results.to_csv(options.outf,sep='\t')
