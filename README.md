@@ -10,6 +10,19 @@ The first script ``get_mirca_read_counts.py`` extracts regions (all exons, UTRs,
 
 ## Usage
 
+### 0. (optional) balance GC content of input reads
+differences in GC content between libraries can lead to spurious associations with GC- or AT-rich motifs. The following two scripts allow to characterize the GC distribution in a bam file and then sample from these files to match a target distribution.  
+
+``` 
+python get_read_GC_content.py -i input.bam > input_GC_stats.txt
+python get_GC_balanced_reads.py -i input.bam -o input_balanced.bam --target_GC target_GC_stats.txt --input_GC input_GC_stats.txt > input_balanced_GC_stats.txt
+```
+the target GC distribution can be obtained, e.g., by averaging over different input files:
+```
+paste input_1_GC_stats.txt input_2_GC_stats.txt ... | grep -v "^#" |  awk '{s=n=0; for (i=2; i<=NF; i+=2) {s+=$i;n++} printf "%s\t%.6f\n",$1,(n ? s/n : $0)}' > target_GC_stats.txt
+```
+fastq (or fastq.gz) files can also be used in both scripts by specifying ``-t fastq``.
+
 ### 1. get read counts
 ```
 python get_mirca_read_counts.py \
@@ -56,15 +69,3 @@ If ``-s`` is given, then events per motif are combined and summary statistics co
 
 If ``-f output_plot.pdf -t plot_title`` are added, this script also produces a summary plot. If additionally ``--motif_definitions motif_definitions.txt`` is given, the script also adds logos for each motif or cluster to the plot (motif definitions from clustered counts can be extracted using ``grep "^# cluster_" clustered_counts.out | tr -d "# " | tr ":" "\t" > motif_definitions.txt``).
 
-### (optional) balance GC content of input reads
-differences in GC content between libraries can lead to spurious associations with GC- or AT-rich motifs. The following two scripts allow to characterize the GC distribution in a bam file and then sample from these files to match a target distribution.  
-
-``` 
-python get_read_GC_content.py -i input.bam > input_GC_stats.txt
-python get_GC_balanced_reads.py -i input.bam -o input_balanced.bam --target_GC target_GC_stats.txt --input_GC input_GC_stats.txt > input_balanced_GC_stats.txt
-```
-the target GC distribution can be obtained, e.g., by averaging over different input files:
-```
-paste input_1_GC_stats.txt input_2_GC_stats.txt ... | grep -v "^#" |  awk '{s=n=0; for (i=2; i<=NF; i+=2) {s+=$i;n++} printf "%s\t%.6f\n",$1,(n ? s/n : $0)}' > target_GC_stats.txt
-```
-fastq (or fastq.gz) files can also be used in both scripts by specifying ``-t fastq``.
