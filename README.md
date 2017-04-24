@@ -15,11 +15,13 @@ differences in GC content between libraries can lead to spurious associations wi
 
 ``` 
 python get_read_GC_content.py -i input.bam > input_GC_stats.txt
-python get_GC_balanced_reads.py -i input.bam -o input_balanced.bam --target_GC target_GC_stats.txt --input_GC input_GC_stats.txt > input_balanced_GC_stats.txt
+python get_GC_balanced_reads.py -i input.bam -o input_balanced.bam \
+	--target_GC target_GC_stats.txt --input_GC input_GC_stats.txt > input_balanced_GC_stats.txt
 ```
 the target GC distribution can be obtained, e.g., by averaging over different input files:
 ```
-paste input_1_GC_stats.txt input_2_GC_stats.txt ... | grep -v "^#" |  awk '{s=n=0; for (i=2; i<=NF; i+=2) {s+=$i;n++} printf "%s\t%.6f\n",$1,(n ? s/n : $0)}' > target_GC_stats.txt
+paste input_1_GC_stats.txt input_2_GC_stats.txt ... | grep -v "^#" |  \
+	awk '{s=n=0; for (i=2; i<=NF; i+=2) {s+=$i;n++} printf "%s\t%.6f\n",$1,(n ? s/n : $0)}' > target_GC_stats.txt
 ```
 fastq (or fastq.gz) files can also be used in both scripts by specifying ``-t fastq``.
 
