@@ -98,6 +98,8 @@ for (mot in all.motifs) {
     }
     dds <- DESeqDataSetFromMatrix(counts.here.df, colData, full_design)
     dds$motif <- factor(dds$motif, levels=c('tot',mot))
+    # use only genes with finite counts for motif
+    dds <- dds[rowSums(counts(dds)[,dds$motif==mot]) > 1,]
     sizeFactors(dds) <- c(sf.tot,sf.tot)
     tryCatch({
       dds <- DESeq(dds, test='LRT', reduced=reduced_design)

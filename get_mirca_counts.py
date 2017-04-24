@@ -215,19 +215,23 @@ if __name__ == '__main__':
 
 	genome=pysam.FastaFile(options.genome)
 
-	print >> sys.stderr, 'using bam files',options.bam
-	bam_files=[bam.strip() for bam in options.bam.split(',')]
-	nB=len(bam_files)
-	nmapped=np.array([pysam.Samfile(bam,'rb').mapped for bam in bam_files])
-	if options.names is not None:
-		names=dict((n,x.strip()) for n,x in enumerate(options.names.split(',')))
-		if len(names)!=nB:
-			raise Exception("number of header names doesn't match number of bam files")
+	if options.bam is not None:
+		print >> sys.stderr, 'using bam files',options.bam
+		bam_files=[bam.strip() for bam in options.bam.split(',')]
+		nB=len(bam_files)
+		nmapped=np.array([pysam.Samfile(bam,'rb').mapped for bam in bam_files])
+		if options.names is not None:
+			names=dict((n,x.strip()) for n,x in enumerate(options.names.split(',')))
+			if len(names)!=nB:
+				raise Exception("number of header names doesn't match number of bam files")
+		else:
+			names=dict(zip(range(nB),range(1,nB+1)))
+		outf.write('# bam files:\n')
+		for n in range(nB):
+			outf.write('#  {0}: {1} ({2} reads)\n'.format(names[n],options.bam.split(',')[n],nmapped[n]))
 	else:
-		names=dict(zip(range(nB),range(1,nB+1)))
-	outf.write('# bam files:\n')
-	for n in range(nB):
-		outf.write('#  {0}: {1} ({2} reads)\n'.format(names[n],options.bam.split(',')[n],nmapped[n]))
+		nB=0
+		bam_files=[]
 
 	outf.write('gene\t{0}\tcount'.format('motif' if use_motifs else 'kmer'))
 	for n in range(nB):
@@ -265,30 +269,34 @@ if __name__ == '__main__':
 				continue
 			# get read coverage using samtools mpileup
 			cov=np.zeros((end-start,nB),dtype=np.int)
-			for line in pysam.mpileup(*(bam_files+['-f',options.genome,'-r',chrom+':'+str(start+1)+'-'+str(end),'-d',str(options.max_depth)])).split('\n'):
-				if line=='':
-					break
-				ls=line.split('\t')
-				pos=int(ls[1])-1
-				ref=ls[2]
-				if pos < start or pos > end-1:
-					raise Exception("unknown position in mpileup")
-				if options.use_TC:
-					# count only T/C mismatches
-					if strand=='+' and ref in 'Tt':
-						cov[pos-start]=np.array([ls[3*(n+1)+1].count('C') for n in range(nB)])
-					elif strand=='-' and ref in 'Aa':
-						cov[pos-start]=np.array([ls[3*(n+1)+1].count('g') for n in range(nB)])
-				else:
-					# here count all reads mapping to the correct strand
-					if strand=='+':
-						cov[pos-start]=np.array([len(re.findall('[\.ACGTN]',ls[3*(n+1)+1])) for n in range(nB)])
+			if nB > 0:
+				for line in pysam.mpileup(*(bam_files+['-f',options.genome,'-r',chrom+':'+str(start+1)+'-'+str(end),'-d',str(options.max_depth)])).split('\n'):
+					if line=='':
+						break
+					ls=line.split('\t')
+					pos=int(ls[1])-1
+					ref=ls[2]
+					if pos < start or pos > end-1:
+						raise Exception("unknown position in mpileup")
+					if options.use_TC:
+						# count only T/C mismatches
+						if strand=='+' and ref in 'Tt':
+							cov[pos-start]=np.array([ls[3*(n+1)+1].count('C') for n in range(nB)])
+						elif strand=='-' and ref in 'Aa':
+							cov[pos-start]=np.array([ls[3*(n+1)+1].count('g') for n in range(nB)])
 					else:
-						cov[pos-start]=np.array([len(re.findall('[\,acgtn]',ls[3*(n+1)+1])) for n in range(nB)])
+						# here count all reads mapping to the correct strand
+						if strand=='+':
+							cov[pos-start]=np.array([len(re.findall('[\.ACGTN]',ls[3*(n+1)+1])) for n in range(nB)])
+						else:
+							cov[pos-start]=np.array([len(re.findall('[\,acgtn]',ls[3*(n+1)+1])) for n in range(nB)])
 			covs.append(cov)
 			# get sequence for the entire region (even where there is no coverage)
 			seq=genome.fetch(reference=chrom,start=start,end=end).upper()
 			seqs.append(seq)
+
+		if len(covs)==0 or len(seqs)==0:
+			continue
 
 		# combine exons for utr3/utr5/cds/tx
 		if 'intron' not in options.region:
@@ -307,7 +315,7 @@ if __name__ == '__main__':
 			raise Exception("lengths don't match!")
 
 		# don't consider this gene or transcript if there is no sequence or no coverage
-		if sum(exon_length) < K or sum(map(lambda x: x.sum(),covs))==0:
+		if sum(exon_length) < K or (nB > 0 and sum(map(lambda x: x.sum(),covs))==0):
 			nskipped+=1
 			continue
 
