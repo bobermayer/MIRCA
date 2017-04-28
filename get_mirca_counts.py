@@ -231,10 +231,10 @@ if __name__ == '__main__':
 			outf.write('#  {0}: {1} ({2} reads)\n'.format(names[n],options.bam.split(',')[n],nmapped[n]))
 	else:
 		nB=0
-		names=[]
+		names={}
 		bam_files=[]
 
-	outf.write('gene\t{0}\tcount\t'.format('motif' if use_motifs else 'kmer')+'\t'.join(names)+'\n')
+	outf.write('gene\t{0}\tcount\t'.format('motif' if use_motifs else 'kmer')+'\t'.join(names[n] for n in range(nB))+'\n')
 
 	if '.gtf' in options.inf:
 		get_regions = get_regions_from_gtf
