@@ -231,12 +231,10 @@ if __name__ == '__main__':
 			outf.write('#  {0}: {1} ({2} reads)\n'.format(names[n],options.bam.split(',')[n],nmapped[n]))
 	else:
 		nB=0
+		names=[]
 		bam_files=[]
 
-	outf.write('gene\t{0}\tcount'.format('motif' if use_motifs else 'kmer'))
-	for n in range(nB):
-		outf.write('\tcov_{0}'.format(names[n]))
-	outf.write('\n')
+	outf.write('gene\t{0}\tcount\t'.format('motif' if use_motifs else 'kmer')+'\t'.join(names)+'\n')
 
 	if '.gtf' in options.inf:
 		get_regions = get_regions_from_gtf
@@ -332,7 +330,7 @@ if __name__ == '__main__':
 			kmer_cov.append(['tot']+[sum(exon_length)]+list(covs[i].sum(axis=0)))
 
 		# sum kmer counts and coverage over all occurrences of the kmer
-		tot_kmer_cov=pd.DataFrame(kmer_cov, columns=['kmer','count']+map(lambda x: 'cov_{0}'.format(names[x]),range(nB))).groupby('kmer').sum()
+		tot_kmer_cov=pd.DataFrame(kmer_cov, columns=['kmer','count']+map(lambda x: '{0}'.format(names[x]),range(nB))).groupby('kmer').sum()
 
 		# print motif occurrences and coverage counts as integer
 		if use_motifs:
