@@ -66,31 +66,30 @@ def get_empirical_qval (pvals,pvals_c):
 	return q
 
 parser=OptionParser()
-parser.add_option('-i','--indir',dest='indir',help="""directory with deseq2 output files (from run_deseq2_for_mirca.R)""")
-parser.add_option('-c','--indir_control',dest='indir_control',help="""directory with deseq2 output files for control run""")
+parser.add_option('-i','--inf',dest='inf',help="""deseq2 output file (from run_deseq2_for_mirca.R)""")
+parser.add_option('-c','--inf_control',dest='inf_control',help="""deseq2 output file for control run""")
 parser.add_option('-a','--alpha',dest='alpha',default=0.05,type=float,help="""significance cutoff [0.05]""")
-parser.add_option('-o','--outf',dest='outf',help="""output file""")
 parser.add_option('-s','--summary',dest='summary',help="""summary output [None]""")
 parser.add_option('-f','--fig',dest='fig',help="""figure output [None]""")
 parser.add_option('-t',dest='title',default='MIRCA stats',help="""title for figure""")
-parser.add_option('','--motif_definitions',dest='motif_definitions',help="""file with motif_definitions for logo generation""")
+parser.add_option('','--motif_images',dest='motif_images',help="""folder with logos for motifs (created by make_logos.py)""")
 
 options,args=parser.parse_args()
 
-results_files=dict((f.split("deseq2_results_")[1].split(".csv")[0],f) for f in os.listdir(options.indir) if f.startswith('deseq2_results') and f.endswith('.csv'))
-print >> sys.stderr, 'reading {0} results files from {1}'.format(len(results_files),options.indir)
-deseq2_results=pd.concat([pd.read_csv(os.path.join(options.indir,f),index_col=0,header=0) for f in results_files.values()],axis=1,keys=results_files.keys())
+print >> sys.stderr, 'reading deseq2 results files from {0}'.format(options.inf)
+deseq2_results=pd.read_csv(options.inf,index_col=0,header=0)
+deseq2_results.columns=pd.MultiIndex.from_tuples([c.split('.') for c in deseq2_results.columns])
 
-if options.indir_control is not None:
+if options.inf_control is not None:
 
-	control_files=dict((f.split("deseq2_results_")[1].split(".csv")[0],f) for f in os.listdir(options.indir_control) if f.startswith('deseq2_results') and f.endswith('.csv'))
-	print >> sys.stderr, 'reading {0} control files from {1}'.format(len(control_files),options.indir_control)
-	deseq2_control=pd.concat([pd.read_csv(os.path.join(options.indir_control,f),index_col=0,header=0) for f in control_files.values()],axis=1,keys=control_files.keys())
+	print >> sys.stderr, 'reading deseq2 control files from {0}'.format(options.inf_control)
+	deseq2_control=pd.read_csv(options.inf_control,index_col=0,header=0)
+	deseq2_control.columns=pd.MultiIndex.from_tuples([c.split('.') for c in deseq2_control.columns])
 
 	print >> sys.stderr, 'estimating empirical q-values using control files'
 
-	pvals=deseq2_results.xs('pvalue',axis=1,level=1)
-	pvals_c=deseq2_control.xs('pvalue',axis=1,level=1)
+	pvals=deseq2_results.xs('pvalue',axis=1,level=2)
+	pvals_c=deseq2_control.xs('pvalue',axis=1,level=2)
 
 	qvals = pd.DataFrame(get_empirical_qval (pvals, pvals_c),index=pvals.index,columns=pvals.columns)
 
@@ -98,123 +97,118 @@ else:
 
 	print >> sys.stderr, 'estimating q-values using global BH correction'
 
-	pvals=deseq2_results.xs('pvalue',axis=1,level=1)
+	pvals=deseq2_results.xs('pvalue',axis=1,level=2)
 	qvals = pd.DataFrame(p_adjust_bh(pvals),index=pvals.index,columns=pvals.columns)
 
 print >> sys.stderr, "found {0} differential binding events at {1:.0f}% FDR".format((qvals < options.alpha).sum().sum(),100*options.alpha)
 
+motifs=deseq2_results.columns.get_level_values(0).unique()
+conditions=deseq2_results.columns.get_level_values(1).unique()
+
 # add these q-values to the table
-for m in deseq2_results.columns.get_level_values(0).unique():
-	deseq2_results[m,'qvalue']=qvals[m]
+for mot in motifs:
+	for cond in conditions:
+		deseq2_results[mot,cond,'qvalue']=qvals[mot,cond]
 deseq2_results=deseq2_results.sort_index(axis=1)
 
-# combine events by motif and collect stats
-events_by_motif=deseq2_results.stack(level=0,dropna=True).groupby(level=1)
-motif_stats=events_by_motif.apply(lambda df: collect_stats (df,options.alpha))
+# combine events by motif and condition and collect stats
+combined_results=deseq2_results.stack(level=[0,1],dropna=True).groupby(level=[1,2]).apply(lambda df: collect_stats (df,options.alpha)).unstack(level=1).swaplevel(0,1,axis=1)
 
 if options.summary is not None:
 
 	print >> sys.stderr, 'writing summary to '+options.summary
-	motif_stats.to_csv(options.summary,sep='\t')
+	combined_results.to_csv(options.summary,sep='\t')
 	
 if options.fig is not None:
 
-	order=(motif_stats['nup_sig']+motif_stats['ndown_sig']).sort_values().index
+	totdiff=combined_results.xs('nup_sig',axis=1,level=1).sum(axis=1)+\
+			 combined_results.xs('ndown_sig',axis=1,level=1).sum(axis=1)
+
+	order=totdiff.sort_values().index
 
 	figheight=.15*len(order)+1
-	figwidth=6
+	figwidth=2.+4*len(conditions)
 
-	left=.35
+	left=2./figwidth
+	dist=4/figwidth
 	bottom=.4/figheight
-	height=1-.3/figheight-bottom
-	width=.19
-	wspace=.02
-	aspect=.1*left*len(order)/height
+	height=1-.35/figheight-bottom
+	width=.8*4/figwidth/3.
+	wspace=.05/len(conditions)
 
-	if options.motif_definitions is not None:
+	if options.motif_images is not None:
 
-		import subprocess
-		import StringIO
 		from matplotlib import image as mpimg
-
-		print >> sys.stderr, 'creating sequence logos using motif definitions from '+options.motif_definitions
-		motif_kmers=dict((line.split()[0],line.split()[1].split(',')) for line in open(options.motif_definitions))
-
-		motif_images={}
-		for n,motif in enumerate(order):
-
-			kmers=motif_kmers[motif]
-			seqs='\n'.join('>seq_{0}.format(n)\n{1}'.format(n,s) for n,s in enumerate(kmers))
-			mout,merr=subprocess.Popen(['muscle'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate(seqs)
-			wout,werr=subprocess.Popen(['weblogo','-F','png_print','-A','dna','-X','no','-Y','no','-P','','-c','classic','--errorbars','no','--aspect-ratio',str(aspect)],\
-									   stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate(mout)
-			#wout,werr=subprocess.Popen(['weblogo','-F','png_print','-A','dna','-X','no','-Y','no','-P','','-c','classic','--errorbars','no','--aspect-ratio',str(aspect),'--scale-width','no','-U','probability'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate(mout)
-			motif_images[motif]=mpimg.imread(StringIO.StringIO(wout))
-
-	else:
-
-		motif_images={}
+		print >> sys.stderr, 'reading motif images'
+		motif_images=dict((mot,mpimg.imread(os.path.join(options.motif_images,'{0}.png'.format(mot)))) for mot in order)
 
 	fig=plt.figure(1,figsize=(figwidth,figheight))
 	fig.clf()
 
-	ax=fig.add_axes([left,bottom,width,height])
-	ax.barh(np.arange(len(order)),motif_stats.ix[order,'nup_sig'],color='r',label='up',lw=0)
-	ax.barh(np.arange(len(order)),motif_stats.ix[order,'ndown_sig'],left=motif_stats.ix[order,'nup_sig'],color='b',label='down',lw=0)
-	ax.set_yticks(np.arange(len(order))+.4)
-	ax.set_yticklabels([o if len(o) < 15 else o[:12]+'...' for o in order],size=8,ha='right',va='center')
-	ax.set_xlabel('diff. bound genes',size=8)
-	ax.set_ylim([0,len(order)-.2])
-	ax.set_xlim([0,1.1*max(map(abs,ax.get_xlim()))])
-	ax.locator_params(axis='x',nbins=5)
-	ax.tick_params(axis='x', which='major', labelsize=8)
-	ax.grid(axis='x')
-	ax.spines['top'].set_visible(False)
-	ax.spines['right'].set_visible(False)
-	ax.get_xaxis().tick_bottom()
-	ax.get_yaxis().tick_left()
+	for n,cond in enumerate(conditions):
 
-	leg=ax.legend(loc=4,prop={'size':8},title='occupancy')
-	leg.get_title().set_fontsize(8)
-	leg.get_frame().set_ec('k')
+		ax=fig.add_axes([left+n*dist,bottom,width,height])
+		ax.barh(np.arange(len(order)),combined_results.ix[order,(cond,'nup_sig')],color='r',label='up',lw=0)
+		ax.barh(np.arange(len(order)),combined_results.ix[order,(cond,'ndown_sig')],left=combined_results.ix[order,(cond,'nup_sig')],color='b',label='down',lw=0)
+		ax.set_yticks(np.arange(len(order))+.4)
+		ax.set_yticklabels([o if len(o) < 15 else o[:12]+'...' for o in order] if n==0 else [],size=8,ha='right',va='center')
+		ax.set_xlabel('diff. bound genes',size=8)
+		ax.set_ylim([0,len(order)-.2])
+		ax.set_xlim([0,1.1*max(map(abs,ax.get_xlim()))])
+		ax.locator_params(axis='x',nbins=5,integer=True)
+		ax.tick_params(axis='x', which='major', labelsize=8)
+		ax.grid(axis='x')
+		ax.spines['top'].set_visible(False)
+		ax.spines['right'].set_visible(False)
+		ax.get_xaxis().tick_bottom()
+		ax.get_yaxis().tick_left()
+		#ax.get_xaxis().set_major_locator(MaxNLocator(integer=True))
 
-	ax=fig.add_axes([left+width+wspace,bottom,width,height])
-	ax.barh(np.arange(len(order)),100*motif_stats.ix[order,'frac_sig'],color='g',lw=0)
-	ax.set_yticks(np.arange(len(order))+.4)
-	ax.set_yticklabels([])
-	ax.set_xlabel('% targets',size=8)
-	ax.set_ylim([0,len(order)-.2])
-	ax.set_xlim([0,1.1*max(ax.get_xlim())])
-	ax.locator_params(axis='x',nbins=3)
-	ax.tick_params(axis='x', which='major', labelsize=8)
-	ax.grid(axis='x')
-	ax.spines['top'].set_visible(False)
-	ax.spines['right'].set_visible(False)
-	ax.get_xaxis().tick_bottom()
-	ax.get_yaxis().tick_left()
+		if n==0:
+			leg=ax.legend(loc=4,prop={'size':8},title='occupancy')
+			leg.get_title().set_fontsize(8)
+			leg.get_frame().set_ec('k')
 
-	ax=fig.add_axes([left+2*(width+wspace),bottom,width,height])
-	ax.barh(np.arange(len(order)),motif_stats.ix[order,'lfc_mean_sig'],xerr=motif_stats.ix[order,'lfc_sem_sig'],color='m',height=.8,label='diff',ecolor='m',error_kw={'lw':.5},lw=0)
-	ax.barh(np.arange(len(order))+.1,motif_stats.ix[order,'lfc_mean_all'],color='DarkGray',height=.6,label='all',lw=0)
-	ax.set_yticks(np.arange(len(order))+.4)
-	ax.set_yticklabels([])
-	ax.set_xlabel('occupancy log2 FC',size=8)
-	ax.set_ylim([0,len(order)-.2])
-	ax.locator_params(axis='x',nbins=5)
-	ax.tick_params(axis='x', which='major', labelsize=8)
-	ax.grid(axis='x')
-	ax.spines['top'].set_visible(False)
-	ax.spines['right'].set_visible(False)
-	ax.get_xaxis().tick_bottom()
-	ax.get_yaxis().tick_left()
+		ax=fig.add_axes([left+n*dist+width+wspace,bottom,width,height])
+		ax.barh(np.arange(len(order)),100*combined_results.ix[order,(cond,'frac_sig')],color='g',lw=0)
+		ax.set_yticks(np.arange(len(order))+.4)
+		ax.set_yticklabels([])
+		ax.set_xlabel('% targets',size=8)
+		ax.set_ylim([0,len(order)-.2])
+		ax.set_xlim([0,1.1*max(ax.get_xlim())])
+		ax.locator_params(axis='x',nbins=3)
+		ax.tick_params(axis='x', which='major', labelsize=8)
+		ax.grid(axis='x')
+		ax.spines['top'].set_visible(False)
+		ax.spines['right'].set_visible(False)
+		ax.get_xaxis().tick_bottom()
+		ax.get_yaxis().tick_left()
+		if len(conditions) > 1:
+			ax.set_title(cond,size=8)
 
-	leg=ax.legend(loc=4,prop={'size':8},title='genes')
-	leg.get_title().set_fontsize(8)
-	leg.get_frame().set_ec('k')
+		ax=fig.add_axes([left+n*dist+2*(width+wspace),bottom,width,height])
+		ax.barh(np.arange(len(order)),combined_results.ix[order,(cond,'lfc_mean_sig')],xerr=combined_results.ix[order,(cond,'lfc_sem_sig')],color='m',height=.8,label='diff',ecolor='m',error_kw={'lw':.5},lw=0)
+		ax.barh(np.arange(len(order))+.1,combined_results.ix[order,(cond,'lfc_mean_all')],color='DarkGray',height=.6,label='all',lw=0)
+		ax.set_yticks(np.arange(len(order))+.4)
+		ax.set_yticklabels([])
+		ax.set_xlabel('occupancy log2 FC',size=8)
+		ax.set_ylim([0,len(order)-.2])
+		ax.locator_params(axis='x',nbins=5)
+		ax.tick_params(axis='x', which='major', labelsize=8)
+		ax.grid(axis='x')
+		ax.spines['top'].set_visible(False)
+		ax.spines['right'].set_visible(False)
+		ax.get_xaxis().tick_bottom()
+		ax.get_yaxis().tick_left()
+
+		if n==0:
+			leg=ax.legend(loc=4,prop={'size':8},title='genes')
+			leg.get_title().set_fontsize(8)
+			leg.get_frame().set_ec('k')
 
 	for n,motif in enumerate(order):
 		if motif in motif_images:
-			ax=fig.add_axes([.01,bottom+n*height/len(order),.5*left,height/len(order)])
+			ax=fig.add_axes([.01/len(conditions),bottom+n*height/len(order),.5*left,height/len(order)])
 			ax.imshow(motif_images[motif])
 			ax.set_axis_off()
 		
@@ -222,13 +216,3 @@ if options.fig is not None:
 
 	print >> sys.stderr, 'saving figure to '+options.fig
 	fig.savefig(options.fig,dpi=600)
-
-if options.outf is not None:
-	# flatten hierarchical index and write output
-	deseq2_results.columns=['.'.join(c) for c in deseq2_results.columns.tolist()]
-	print >> sys.stderr, 'writing full output to '+options.outf
-	if options.outf.endswith('.gz'):
-		with gzip.open(options.outf,'wb') as outf:
-			deseq2_results.to_csv(outf,sep='\t')
-	else:
-		deseq2_results.to_csv(options.outf,sep='\t')

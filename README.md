@@ -52,20 +52,20 @@ Count profiles over genes and conditions for clusters of motifs (or Kmers) defin
 ``` 
 Rscript run_deseq2_for_mirca.R \
 	-i mirca_counts.out \
-	-o mirca_deseq2_results \
+	-o mirca_results.csv.gz \
 	-c condition1,condition1,condition2,condition2 
 ```
-Here, ``-o`` is an output directory (will be created if it doesn't exists) with deseq2 results for each motif, and ``-c`` specifies the conditions corresponding to the columns of ``mirca_counts.out``. Zero-length conditions or conditions called ``_`` will be ignored, allowing to select specific columns in the input file. DESeq2 is used with a likelihood ratio test (LRT) for the significance of an interaction between the condition and a ``motif`` factor, which selects read/conversion counts over a specific motif or the entire region, respectively (i.e., changes in the ratio of read counts over motif vs. the entire regions are tested for differences between conditions; by default, differential occupancy is tested between the alphabetically last and the first condition in this list, but different or more complex designs can be tested by appropriately editing lines 60-61 in the script). Numerical or categorical covariates for each condition can be supplied with ``--num_covariate`` or ``--cat_covariate``.
+Here, ``-c`` specifies the conditions corresponding to the columns of ``mirca_counts.out``. Zero-length conditions or conditions called ``_`` will be ignored, allowing to select specific columns in the input file. By default, all conditions will be tested against a reference condition (alphabetically first one, or one given using ``--reference``). DESeq2 is used with a likelihood ratio test (LRT) for the significance of an interaction between the condition and a ``motif`` factor, which selects read/conversion counts over a specific motif or the entire region, respectively (i.e., changes in the ratio of read counts over motif vs. the entire regions are tested for differences between conditions. Different or more complex designs can be tested by appropriately editing the script at the indicated lines. Numerical or categorical covariates for each condition can be supplied with ``--num_covariate`` or ``--cat_covariate``.
 
 A control run with permuted labels can be performed like this:
-`` Rscript run_deseq2_for_mirca.R -i mirca_counts.out -o mirca_deseq2_control -c condition1,condition2,condition1,condition2 ``
+`` Rscript run_deseq2_for_mirca.R -i mirca_counts.out -o mirca_control.csv.gz -c condition1,condition2,condition1,condition2 ``
 
 ### 4. collect results
 ``` 
-python collect_mirca_results.py -i mirca_deseq2_results -o mirca_results_full.tsv(.gz) -s mirca_results_summary.tsv 
+python collect_mirca_results.py -i mirca_results.csv.gz -s mirca_results_summary.tsv 
 ```
 
-This script collects the DESeq2 output in ``mirca_deseq2_results`` and determines globally significant events. An empirical FDR for selecting significant events (specified with ``-a``, default: 0.05) can be calculated by specifying the output directory of a control run using ``-c mirca_deseq2_control``, otherwise p-values for all genes and all motifs are globally adjusted using the BH method. All results are written to ``mirca_results_full.tsv``. 
+This script uses the DESeq2 output in ``mirca_results.csv.gz`` and determines globally significant events. An empirical FDR for selecting significant events (specified with ``-a``, default: 0.05) can be calculated by specifying the output of a control run using ``-c mirca_control.csv.zg``, otherwise p-values for all genes and all motifs are globally adjusted using the BH method. 
 
 If ``-s`` is given, then events per motif are combined and summary statistics collected: number of genes with up-regulated binding, number of genes with down-regulated binding, fraction of differentially bound targets (diff. bound genes relative to all genes with nonzero coverage at this motif), mean and s.e.m. of occupancy log2 fold change across differentially bound genes, a p-value from a t-test of these log2 fold changes against 0, mean and s.e.m. of occupancy log 2 fold change across all genes, and lists of up- and down-regulated genes. 
 
