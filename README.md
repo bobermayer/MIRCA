@@ -55,7 +55,7 @@ Rscript run_deseq2_for_mirca.R \
 	-o mirca_results.csv.gz \
 	-c condition1,condition1,condition2,condition2 
 ```
-Here, ``-c`` specifies the conditions corresponding to the columns of ``mirca_counts.out``. Zero-length conditions or conditions called ``_`` will be ignored, allowing to select specific columns in the input file. By default, all conditions will be tested against a reference condition (alphabetically first one, or one given using ``--reference``). DESeq2 is used with a likelihood ratio test (LRT) for the significance of an interaction between the condition and a ``motif`` factor, which selects read/conversion counts over a specific motif or the entire region, respectively (i.e., changes in the ratio of read counts over motif vs. the entire regions are tested for differences between conditions. Different or more complex designs can be tested by appropriately editing the script at the indicated lines. Numerical or categorical covariates for each condition can be supplied with ``--num_covariate`` or ``--cat_covariate``.
+Here, ``-c`` specifies the conditions corresponding to the columns of ``mirca_counts.out``. Zero-length conditions or conditions called ``_`` will be ignored, allowing to select specific columns in the input file. By default, all conditions will be tested against a reference condition (alphabetically first one, or one specified with ``--reference``). DESeq2 is used with a likelihood ratio test (LRT) for the significance of an interaction between the condition and a ``motif`` factor, which selects read/conversion counts over a specific motif or the entire region, respectively (i.e., changes in the ratio of read counts over motif vs. the entire regions are tested for differences between conditions. Different or more complex designs can be tested by appropriately editing the script at the indicated lines. Numerical or categorical covariates for each condition can be supplied with ``--num_covariate`` or ``--cat_covariate``.
 
 A control run with permuted labels can be performed like this:
 `` Rscript run_deseq2_for_mirca.R -i mirca_counts.out -o mirca_control.csv.gz -c condition1,condition2,condition1,condition2 ``
@@ -67,7 +67,7 @@ python make_logos.py -i rbp_definitions.txt -o motif_directory
 this script uses ``muscle`` and [weblogo](https://pypi.python.org/pypi/weblogo) to create logos for each motif in ``rbp_definitions.txt``. Motif definitions from clustered counts can be extracted using ``grep "^# cluster_" clustered_counts.out | tr -d "# " | tr ":" "\t" > motif_definitions.txt``.
 
 
-### 4. collect results
+### 5. collect results
 ``` 
 python collect_mirca_results.py -i mirca_results.csv.gz -s mirca_results_summary.tsv 
 ```
