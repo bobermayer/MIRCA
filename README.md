@@ -60,6 +60,13 @@ Here, ``-c`` specifies the conditions corresponding to the columns of ``mirca_co
 A control run with permuted labels can be performed like this:
 `` Rscript run_deseq2_for_mirca.R -i mirca_counts.out -o mirca_control.csv.gz -c condition1,condition2,condition1,condition2 ``
 
+### 4. (optional) create logos
+```
+python make_logos.py -i rbp_definitions.txt -o motif_directory
+```
+this script uses ``muscle`` and [weblogo](https://pypi.python.org/pypi/weblogo) to create logos for each motif in ``rbp_definitions.txt``. Motif definitions from clustered counts can be extracted using ``grep "^# cluster_" clustered_counts.out | tr -d "# " | tr ":" "\t" > motif_definitions.txt``.
+
+
 ### 4. collect results
 ``` 
 python collect_mirca_results.py -i mirca_results.csv.gz -s mirca_results_summary.tsv 
@@ -69,5 +76,5 @@ This script uses the DESeq2 output in ``mirca_results.csv.gz`` and determines gl
 
 If ``-s`` is given, then events per motif are combined and summary statistics collected: number of genes with up-regulated binding, number of genes with down-regulated binding, fraction of differentially bound targets (diff. bound genes relative to all genes with nonzero coverage at this motif), mean and s.e.m. of occupancy log2 fold change across differentially bound genes, a p-value from a t-test of these log2 fold changes against 0, mean and s.e.m. of occupancy log 2 fold change across all genes, and lists of up- and down-regulated genes. 
 
-If ``-f output_plot.pdf -t plot_title`` are added, this script also produces a summary plot. If additionally ``--motif_definitions motif_definitions.txt`` is given, the script also adds logos for each motif or cluster to the plot (motif definitions from clustered counts can be extracted using ``grep "^# cluster_" clustered_counts.out | tr -d "# " | tr ":" "\t" > motif_definitions.txt``).
+If ``-f output_plot.pdf -t plot_title`` are added, this script also produces a summary plot. If additionally ``--motif_images motif_directory`` is given, the script also adds logos for each motif or cluster to the plot.
 
