@@ -212,7 +212,7 @@ if options.fig is not None:
 			ax.imshow(motif_images[motif])
 			ax.set_axis_off()
 		
-	fig.suptitle(options.title+' ({0:.0f}% FDR)'.format(100*options.alpha),size=10,y=(1.+bottom+height)/2.,va='center')
+	fig.suptitle(options.title+' ({0:.0f}% FDR)'.format(100*options.alpha),size=8,y=.7+.3*(bottom+height),va='center')
 
 	print >> sys.stderr, 'saving figure to '+options.fig
 	fig.savefig(options.fig,dpi=600)
