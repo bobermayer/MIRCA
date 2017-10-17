@@ -12,6 +12,7 @@ parser.add_option('','--target_GC',dest='target_GC',help="""target GC distributi
 parser.add_option('','--input_GC',dest='input_GC',help="""input GC distribution (output of get_read_GC_content.py)""")
 parser.add_option('-n','--nbins',dest='nbins',default=10,type=int,help="number of bins for histogram")
 parser.add_option('-s','--seed',dest='seed',default=0,type=int,help="""random seed [0]""")
+parser.add_option('','--genome',help="""genome (indexed fasta) to use genomic (not read) sequence (only for mapped reads)""")
 
 options,args=parser.parse_args()
 
@@ -27,31 +28,39 @@ ratio=ratio/ratio[input_GC > .1*input_GC.sum()/options.nbins].max()
 bins=ratio.index
 
 if options.type=='bam':
-	import pysam
-	inf=pysam.Samfile(options.inf)
-	outf=pysam.Samfile(options.out,'wb',template=inf)
+    import pysam
+    inf=pysam.Samfile(options.inf)
+    outf=pysam.Samfile(options.out,'wb',template=inf)
+    if options.genome is not None:
+        genome=pysam.FastaFile(options.genome)
 else:
-	import gzip
-	from Bio import SeqIO
-	inf=SeqIO.parse(gzip.open(options.inf,'rb') if options.inf.endswith('.gz') else options.inf,options.type)
-	outf=gzip.open(options.out,'wb') if options.out.endswith('.gz') else open(options.out,'w')
+    if options.genome is not None:
+        raise Exception("cannot get genomic read sequence for fastq!")
+    import gzip
+    from Bio import SeqIO
+    inf=SeqIO.parse(gzip.open(options.inf,'rb') if options.inf.endswith('.gz') else options.inf,options.type)
+    outf=gzip.open(options.out,'wb') if options.out.endswith('.gz') else open(options.out,'w')
 
 
 GC_old=[]
 GC_new=[]
 for n,read in enumerate(inf):
-	if n%1000==0:
-		print >> sys.stderr, 'processed {0}k reads\r'.format(n/1000),
-	seq=str(read.seq).upper()
-	gc=(seq.count('G')+seq.count('C'))/float(len(seq))
-	i=np.searchsorted(bins,gc)
-	GC_old.append(gc)
-	if np.random.rand() < ratio[bins[max(i-1,0)]]:
-		GC_new.append(gc)
-		if options.type=='bam':
-			outf.write(read)
-		else:
-			SeqIO.write(read,outf,options.type)
+    if n%1000==0:
+        print >> sys.stderr, 'processed {0}k reads\r'.format(n/1000),
+    if options.genome is not None:
+        chunks=np.concatenate([[read.reference_start],read.reference_start+np.where(np.diff(read.positions) > 1)[0],[read.reference_end]])
+        seq=''.join([genome.fetch(reference=read.reference_name,start=chunks[i],end=chunks[i+1]) for i in range(len(chunks)-1)]).upper()
+    else:
+        seq=str(read.seq).upper()
+    gc=(seq.count('G')+seq.count('C'))/float(len(seq))
+    i=np.searchsorted(bins,gc)
+    GC_old.append(gc)
+    if np.random.rand() < ratio[bins[max(i-1,0)]]:
+        GC_new.append(gc)
+        if options.type=='bam':
+            outf.write(read)
+        else:
+            SeqIO.write(read,outf,options.type)
 
 print >> sys.stderr, 'processed {0} reads'.format(n)
 
