@@ -35,6 +35,8 @@ for n,read in enumerate(inf):
     if n%1000==0:
         print >> sys.stderr, 'processed {0}k reads\r'.format(n/1000),
     if options.genome is not None:
+        if read.reference_name not in genome.references:
+            break
         chunks=np.concatenate([[read.reference_start],read.reference_start+np.where(np.diff(read.positions) > 1)[0],[read.reference_end]])
         seq=''.join([genome.fetch(reference=read.reference_name,start=chunks[i],end=chunks[i+1]) for i in range(len(chunks)-1)]).upper()
     else:
