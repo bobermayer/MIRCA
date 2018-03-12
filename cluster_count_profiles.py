@@ -136,8 +136,6 @@ clustered_counts=pd.concat([counts[counts.index.get_level_values(1).isin(clust)]
 						   axis=0,keys=cluster_motifs.keys()+['tot']).swaplevel(0,1,axis=0).sort_index(axis=0).fillna(0).astype(int)[counts.columns]
 clustered_counts.index.names=['gene','motif']
 
-raise Exception('stop')
-
 print >> sys.stderr, 'writing cluster definitions and clustered counts to '+options.counts_out
 with open(options.counts_out,'w') as outf:
 	outf.write(''.join(comments))
