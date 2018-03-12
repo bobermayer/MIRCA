@@ -12,7 +12,8 @@ option_list <- list(
   make_option("--num_covariate",type="character",help="comma-separated list of numerical covariates",metavar="list"),
   make_option("--cat_covariate",type="character",help="comma-separated list of categorical covariates",metavar="list"),
   make_option("--alpha",type="double",default=0.1,help="significance cutoff alpha [%default]",metavar="double"),
-  make_option("--test",type="character",default='LRT',help="statistical test: Wald (with betaPrior) or LRT [%default]",metavar="string")
+  make_option("--test",type="character",default='LRT',help="statistical test: Wald (with betaPrior) or LRT [%default]",metavar="string"),
+  make_option("--min_genes",type="integer",default=10,help="min number of genes per motif [%default]",metavar="string")
 )
 
 opt_parser <- OptionParser(option_list = option_list)
@@ -101,6 +102,10 @@ res <- list()
 for (mot in all.motifs) {
   print (paste0('deseq2 (',options$test,') for ',mot))
   counts.motif <- data.table(na.omit(counts.all[counts.all$motif==mot,columns]))
+  if (sum(rowSums(counts.motif[,2:length(counts.motif)]) > 0) < options$min_genes) {
+    print(paste0('skipping ',mot))
+    next
+  }
   counts.here <- merge(counts.tot,counts.motif,by='gene',all.y=TRUE,suffixes=c('_tot',paste0('_',mot)))
   counts.here.df <- as.data.frame.matrix(counts.here[,2:length(counts.here),with=FALSE],row.names=as.vector(counts.here$gene))
   sampleName <- colnames(counts.here)[2:length(colnames(counts.here))]

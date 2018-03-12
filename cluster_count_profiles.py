@@ -131,9 +131,12 @@ print >> sys.stderr, 'obtained {0} clusters after dropping {1}'.format(nclusters
 print >> sys.stderr, 'combining counts over clusters'
 # get combined dataframe of counts: sum up counts over all motifs belonging to one cluster and add total counts
 clustered_counts=pd.concat([counts[counts.index.get_level_values(1).isin(clust)].sum(axis=0,level=0) \
-							for clust in cluster_motifs.values()] + [tot_counts],\
+							for clust in cluster_motifs.values()] + \
+                               [counts.xs('tot',level=1,axis=0).astype(float)],\
 						   axis=0,keys=cluster_motifs.keys()+['tot']).swaplevel(0,1,axis=0).sort_index(axis=0).fillna(0).astype(int)[counts.columns]
 clustered_counts.index.names=['gene','motif']
+
+raise Exception('stop')
 
 print >> sys.stderr, 'writing cluster definitions and clustered counts to '+options.counts_out
 with open(options.counts_out,'w') as outf:

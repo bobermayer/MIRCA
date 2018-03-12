@@ -234,7 +234,7 @@ if __name__ == '__main__':
 		names={}
 		bam_files=[]
 
-	outf.write('gene\t{0}\tcount\t'.format('motif' if use_motifs else 'kmer')+'\t'.join(names[n] for n in range(nB))+'\n')
+	outf.write('gene\tmotif\tcount\t'+'\t'.join(names[n] for n in range(nB))+'\n')
 
 	if '.gtf' in options.inf:
 		get_regions = get_regions_from_gtf
