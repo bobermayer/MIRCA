@@ -72,13 +72,16 @@ def get_regions_from_bed(bed_file,flank_len=100):
 		if strand=='-':
 			utr3_exons,utr5_exons=utr5_exons,utr3_exons
 			intron_up_flanks,intron_down_flanks=intron_down_flanks,intron_up_flanks
+		
+		intron_flanks=merge_intervals([i for ii in zip(intron_down_flanks,intron_up_flanks) for i in ii])
 
 		yield (name,chrom,strand,{'utr3': utr3_exons,\
-								  'utr5': utr5_exons,\
-								  'cds': cds_exons,\
-								  'tx': tx_exons,\
-								  'intron_up': intron_up_flanks,\
-								  'intron_down': intron_down_flanks})
+					  'utr5': utr5_exons,\
+					  'cds': cds_exons,\
+					  'tx': tx_exons,\
+					  'intron_up': intron_up_flanks,\
+					  'intron_down': intron_down_flanks,\
+					  'intron': intron_flanks})
 
 def get_regions_from_gtf(gtf_file,flank_len=100):
 
@@ -151,12 +154,15 @@ def get_regions_from_gtf(gtf_file,flank_len=100):
 			utr5_exons,utr3_exons=utr3_exons,utr5_exons
 			intron_up_flanks,intron_down_flanks=intron_down_flanks,intron_up_flanks
 
+		intron_flanks=merge_intervals([i for ii in zip(intron_down_flanks,intron_up_flanks) for i in ii])
+
 		return (gene, chroms.pop(), strands.pop(),{'utr3':merge_intervals(utr3_exons),\
-												   'utr5':merge_intervals(utr5_exons),\
-												   'cds':merge_intervals(cds_exons),\
-												   'tx':merged_exons,\
-												   'intron_up':intron_up_flanks,\
-												   'intron_down':intron_down_flanks})
+							   'utr5':merge_intervals(utr5_exons),\
+							   'cds':merge_intervals(cds_exons),\
+							   'tx':merged_exons,\
+							   'intron_up':intron_up_flanks,\
+							   'intron_down':intron_down_flanks,\
+ 							   'intron':intron_flanks})
 
 	gene_lines=defaultdict(list)
 	for line in gtf_file:
@@ -180,7 +186,7 @@ if __name__ == '__main__':
 	parser.add_option('-K','--K',dest='K',default=7,help="k-mers to analyze [7]",type=int)
 	parser.add_option('-E','--E',dest='E',default=0,help="extend k-mer regions by E nucleotides [0]",type=int)
 	parser.add_option('-f','--flank_len',dest='flank_len',default=100,type=int,help="length of intron flanks [100]")
-	parser.add_option('-r','--region',dest='region',default='utr3',help="which region to use (utr5/cds/utr3/tx/intron_up/intron_down) [utr3]")
+	parser.add_option('-r','--region',dest='region',default='utr3',help="which region to use (utr5/cds/utr3/tx/intron_up/intron_down/intron) [utr3]")
 	parser.add_option('-n','--names',dest='names',default=None,help="header names for bam files (comma-separated)")
 	parser.add_option('-m','--motif_file',dest='motif_file',help="file with motif name and comma-separated list of kmers for each motif")
 	parser.add_option('-g','--genome',dest='genome',help="genome file (fasta; must be indexed)")
@@ -198,7 +204,7 @@ if __name__ == '__main__':
 	else:
 		outf=open(options.outf,'w')
 
-	if options.region not in ['utr5','cds','utr3','tx','intron_up','intron_down']:
+	if options.region not in ['utr5','cds','utr3','tx','intron_up','intron_down','intron']:
 		raise Exception("unknown region selected!")
 
 	print >> sys.stderr, '{0} counts in {1} from {2}'.format('TC' if options.use_TC else 'read', options.region,options.inf)

@@ -14,14 +14,14 @@ options,args=parser.parse_args()
 
 if not os.path.isdir(options.outdir):
 	print >> sys.stderr, 'creating output directory '+options.outdir
-	os.system('mkdir '+options.outdir)
+	os.mkdir(options.outdir)
 
 print >> sys.stderr, 'creating sequence logos using motif definitions from '+options.motif_definitions
 for line in open(options.motif_definitions):
 	motif=line.split()[0]
 	kmers=line.split()[1].split(',')
 	print >> sys.stderr, motif
-	seqs='\n'.join('>seq_{0}.format(n)\n{1}'.format(n,s) for n,s in enumerate(kmers))
+	seqs='\n'.join('>seq_{0}\n{1}'.format(n,s) for n,s in enumerate(kmers))
 	mout,merr=subprocess.Popen(['muscle'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate(seqs)
 	outfile=os.path.join(options.outdir,'{0}.png'.format(motif))
 	wout,werr=subprocess.Popen(['weblogo','-F','png_print','-A','dna','-X','no','-Y','no','-P','','-c','classic','--errorbars','no','-o',outfile],\

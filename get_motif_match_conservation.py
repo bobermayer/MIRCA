@@ -1,177 +1,5 @@
-import os
-import sys
-import re
-import numpy as np
-import pandas as pd
-import bisect
-import gzip
-import pysam
+from get_mirca_counts import *
 import pyBigWig
-from string import maketrans
-from collections import defaultdict,Counter
-from optparse import OptionParser
-
-def RC (s):
-
-	""" get reverse complement of sequence """
-
-	rc_tab=maketrans('ACGTUNacgtun','TGCAANtgcaan')
-
-	return s.translate(rc_tab)[::-1]
-
-def merge_intervals (intervals):
-
-	""" interval merging function from here: http://codereview.stackexchange.com/questions/69242/merging-overlapping-intervals """
-
-	sorted_by_lower_bound = sorted(intervals, key=lambda tup: tup[0])
-	merged = []
-
-	for higher in sorted_by_lower_bound:
-		if not merged:
-			merged.append(higher)
-		else:
-			lower = merged[-1]
-			# test for intersection between lower and higher:
-			# we know via sorting that lower[0] <= higher[0]
-			if higher[0] <= lower[1]:
-				upper_bound = max(lower[1], higher[1])
-				merged[-1] = (lower[0], upper_bound)  # replace by merged interval
-			else:
-				merged.append(higher)
-
-	return merged
-
-def get_regions_from_bed(bed_file,flank_len=100):
-
-	""" parse 12-column bed file and extract exons, CDS, UTRs and intron flanks """
-
-	for line in bed_file:
-
-		ls=line.split()
-		chrom,tstart,tend,name,_,strand,cstart,cend,_,nexons,exon_size,exon_start=ls
-		tstart,tend,cstart,cend,nexons=map(int,[tstart,tend,cstart,cend,nexons])
-		exon_start=[tstart+int(x) for x in exon_start.strip(',').split(',')]
-		exon_end=[exon_start[k]+int(x) for k,x in enumerate(exon_size.strip(',').split(','))]
-		length=tend-tstart
-		fe=bisect.bisect(exon_start,cstart)-1
-		le=bisect.bisect(exon_start,cend)-1
-
-		utr5_exons=[(exon_start[k],exon_end[k]) for k in range(fe)]+[(exon_start[fe],cstart)]
-		utr3_exons=[(cend,exon_end[le])]+[(exon_start[k],exon_end[k]) for k in range(le+1,nexons)]
-		if le > fe:
-			cds_exons=[(cstart,exon_end[fe])]+[(exon_start[k],exon_end[k]) for k in range(fe+1,le)]+[(exon_start[le],cend)]
-		else:
-			cds_exons=[(cstart,cend)]
-		tx_exons=[(exon_start[k],exon_end[k]) for k in range(nexons)]
-		intron_up_flanks=[]
-		intron_down_flanks=[]
-		for k in range(nexons-1):
-			intron_half_point=exon_end[k]+(exon_start[k+1]-exon_end[k])/2
-			intron_up_flanks.append((exon_end[k],min(exon_end[k]+flank_len,intron_half_point)))
-			intron_down_flanks.append((max(intron_half_point,exon_start[k+1]-flank_len),exon_start[k+1]))
-
-		if strand=='-':
-			utr3_exons,utr5_exons=utr5_exons,utr3_exons
-			intron_up_flanks,intron_down_flanks=intron_down_flanks,intron_up_flanks
-
-		yield (name,chrom,strand,{'utr3': utr3_exons,\
-								  'utr5': utr5_exons,\
-								  'cds': cds_exons,\
-								  'tx': tx_exons,\
-								  'intron_up': intron_up_flanks,\
-								  'intron_down': intron_down_flanks})
-
-def get_regions_from_gtf(gtf_file,flank_len=100):
-
-	""" parse gencode-style gtf file and extract exons, CDS, UTRs and intron flanks """
-
-	def get_exons (gene, lines, flank_len):
-
-		""" extract regions from a bunch of lines belonging to one gene """
-
-		all_exons=[]
-		cds_exons=[]
-		utr_exons=[]
-		chroms=set([])
-		strands=set([])
-
-		for ls in lines:
-
-			info=dict((x.split()[0].strip(),x.split()[1].strip().strip('"')) for x in ls[8].strip(';').split(";"))
-			chrom=ls[0]
-			strand=ls[6]
-			
-			chroms.add(chrom)
-			strands.add(strand)
-
-			# extract CDS, UTR and exon lines for this gene
-			if ls[2]=='CDS':
-				cds_exons.append((int(ls[3])-1,int(ls[4])))
-			elif ls[2]=='UTR':
-				utr_exons.append((int(ls[3])-1,int(ls[4])))
-			# ignore exons of non-protein-coding isoforms of protein-coding genes
-			if ls[2]=='exon' and (info['gene_type']!='protein_coding' or info['transcript_type']=='protein_coding'):
-				all_exons.append((int(ls[3])-1,int(ls[4])))
-
-		if len(chroms)!=1 or len(strands)!=1:
-			raise Exception("more than one chrom or strand in lines")
-
-		if len(cds_exons)==0:
-			return (gene, chroms.pop(), strands.pop(), [])
-
-		min_CDS=min(start for start,_ in cds_exons)
-		max_CDS=max(end for _,end in cds_exons)
-
-		utr3_exons=[]
-		utr5_exons=[]
-		for start,end in utr_exons:
-			if end <= min_CDS:
-				utr5_exons.append((start,end))
-			elif start >= max_CDS:
-				utr3_exons.append((start,end))
-
-		merged_exons=merge_intervals(all_exons)
-
-		if len(merged_exons) > 0:
-
-			exon_start,exon_end=zip(*merged_exons)
-			nexons=len(exon_start)
-			intron_up_flanks=[]
-			intron_down_flanks=[]
-			for k in range(nexons-1):
-				intron_half_point=exon_end[k]+(exon_start[k+1]-exon_end[k])/2
-				intron_up_flanks.append((exon_end[k],min(exon_end[k]+flank_len,intron_half_point)))
-				intron_down_flanks.append((max(intron_half_point,exon_start[k+1]-flank_len),exon_start[k+1]))
-
-		else:
-
-			intron_up_flanks=[]
-			intron_down_flanks=[]
-
-		if strand=='-':
-			utr5_exons,utr3_exons=utr3_exons,utr5_exons
-			intron_up_flanks,intron_down_flanks=intron_down_flanks,intron_up_flanks
-
-		return (gene, chroms.pop(), strands.pop(),{'utr3':merge_intervals(utr3_exons),\
-												   'utr5':merge_intervals(utr5_exons),\
-												   'cds':merge_intervals(cds_exons),\
-												   'tx':merged_exons,\
-												   'intron_up':intron_up_flanks,\
-												   'intron_down':intron_down_flanks})
-
-	gene_lines=defaultdict(list)
-	for line in gtf_file:
-
-		if line.startswith('#'):
-			continue
-
-		ls=line.strip().split("\t")
-		info=dict((x.split()[0].strip(),x.split()[1].strip().strip('"')) for x in ls[8].strip(';').split(";"))
-		name=info['gene_id']
-		gene_lines[name].append(ls)
-
-	for gene,lines in gene_lines.iteritems():
-		yield get_exons(gene,lines,flank_len)
 
 if __name__ == '__main__':
 
@@ -181,7 +9,7 @@ if __name__ == '__main__':
 	parser.add_option('-K','--K',dest='K',default=7,help="k-mers to analyze [7]",type=int)
 	parser.add_option('-E','--E',dest='E',default=0,help="extend k-mer regions by E nucleotides [0]",type=int)
 	parser.add_option('-f','--flank_len',dest='flank_len',default=100,type=int,help="length of intron flanks [100]")
-	parser.add_option('-r','--region',dest='region',default='utr3',help="which region to use (utr5/cds/utr3/tx/intron_up/intron_down) [utr3]")
+	parser.add_option('-r','--region',dest='region',default='utr3',help="which region to use (utr5/cds/utr3/tx/intron_up/intron_down/intron) [utr3]")
 	parser.add_option('-m','--motif_file',dest='motif_file',help="file with motif name and comma-separated list of kmers for each motif")
 	parser.add_option('-g','--genome',dest='genome',help="genome file (fasta; must be indexed)")
 	parser.add_option('-o','--outfile',dest='outf',help="output file [stdout]")
@@ -196,7 +24,7 @@ if __name__ == '__main__':
 	else:
 		outf=open(options.outf,'w')
 
-	if options.region not in ['utr5','cds','utr3','tx','intron_up','intron_down']:
+	if options.region not in ['utr5','cds','utr3','tx','intron_up','intron_down','intron']:
 		raise Exception("unknown region selected!")
 
 	print >> sys.stderr, 'conserved motifs in {0} from {1}'.format(options.region,options.inf)
