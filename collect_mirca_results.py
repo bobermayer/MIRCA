@@ -206,11 +206,12 @@ if options.fig is not None:
 			leg.get_title().set_fontsize(8)
 			leg.get_frame().set_ec('k')
 
-	for n,motif in enumerate(order):
-		if motif in motif_images:
-			ax=fig.add_axes([.01/len(conditions),bottom+n*height/len(order),.5*left,height/len(order)])
-			ax.imshow(motif_images[motif])
-			ax.set_axis_off()
+	if options.motif_images is not None:
+		for n,motif in enumerate(order):
+			if motif in motif_images:
+				ax=fig.add_axes([.01/len(conditions),bottom+n*height/len(order),.5*left,height/len(order)])
+				ax.imshow(motif_images[motif])
+				ax.set_axis_off()
 		
 	fig.suptitle(options.title+' ({0:.0f}% FDR)'.format(100*options.alpha),size=8,y=.7+.3*(bottom+height),va='center')
 
