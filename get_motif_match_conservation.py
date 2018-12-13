@@ -111,22 +111,33 @@ if __name__ == '__main__':
 		for i in range(nexons):
 			for k in range(exon_length[i]-K+1):
 				# use mean read count over stretch of length K+2*E
-				kmer_cons.append([seqs[i][k:k+K],1,cons[i][max(k-E,0):min(k+K+E,exon_length[i])].mean()])
-			kmer_cons.append(['tot',sum(exon_length),cons[i].sum()])
+				kmer_cons.append([seqs[i][k:k+K],1,i,k,cons[i][max(k-E,0):min(k+K+E,exon_length[i])].mean()])
+			kmer_cons.append(['tot',exon_length[i],i,0,cons[i].sum()])
+
+        # get effective length of motif match accounting for overlaps by considering distances between kmer positions
+        def get_overlap_factor(y):
+            def get_eff_length(x):
+                return x['pos'].sort_values().diff().fillna(K).clip_upper(K).sum()
+            return y.groupby('exon').aggregate(get_eff_length).sum()/float(K*y.shape[0])
 
 		# sum kmer counts and average conservation over all occurrences of the kmer
-		tot_kmer_cons=pd.DataFrame(kmer_cons, columns=['kmer','count','cons']).groupby('kmer').sum()
+		# tot_kmer_cons=pd.DataFrame(kmer_cons, columns=['kmer','count','cons']).groupby('kmer').sum()
+        cols=['kmer','count','exon','pos','cons']
+        tot_kmer_cons=pd.DataFrame(kmer_cons, columns=cols).set_index('kmer')
 
 		# print motif occurrences and conservation
-		if use_motifs:
-			# sum over all kmers for this motif
-			tot_motif_cons=tot_kmer_cons.join(motifs).groupby('motif').sum()
-			tot_motif_cons.loc['tot']=tot_kmer_cons.loc['tot']
-			for motif,vals in tot_motif_cons.iterrows():
-				outf.write("{0}\t{1}\t{2:.0f}\t{3:.4f}\n".format(name,motif,vals['count'],vals['cons']/vals['count']))
-		else:
-			for kmer,vals in tot_kmer_cons.iterrows():
-				outf.write("{0}\t{1}\t{2:.0f}\t{3:.4f}\n".format(name,kmer,vals['count'],vals['cons']/vals['count']))
+        if use_motifs:
+            overlap_factor=tot_kmer_cons[['exon','pos']].join(motifs).groupby('motif').aggregate(get_overlap_factor)['pos']
+            # sum over all kmers for this motif
+            tot_motif_cons=tot_kmer_cons.join(motifs).groupby('motif').sum().multiply(overlap_factor,axis=0)
+            tot_motif_cons.loc['tot']=tot_kmer_cons.loc[['tot']].sum(axis=0)
+            for motif,vals in tot_motif_cons.iterrows():
+                outf.write("{0}\t{1}\t{2:.4f}\t{3:.4f}\n".format(name,motif,vals['count'],vals['cons']/vals['count']))
+        else:
+            overlap_factor=tot_kmer_cons[['exon','pos']].groupby('kmer').aggregate(get_overlap_factor)['pos']
+            tot_kmer_cons=tot_kmer_cons.groupby('kmer').sum().multiply(overlap_factor,axis=0)
+            for kmer,vals in tot_kmer_cons.iterrows():
+                outf.write("{0}\t{1}\t{2:.4f}\t{3:.4f}\n".format(name,kmer,vals['count'],vals['cons']/vals['count']))
 
 	print >> sys.stderr, 'done ({0} skipped)'.format(nskipped)
 

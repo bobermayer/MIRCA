@@ -344,23 +344,29 @@ if __name__ == '__main__':
         cols=['kmer','count','exon','pos']+map(lambda x: '{0}'.format(names[x]),range(nB))
         tot_kmer_cov=pd.DataFrame(kmer_cov, columns=cols).set_index('kmer')
 
+        # get effective length of motif match accounting for overlaps by considering distances between kmer positions
+        def get_overlap_factor(y):
+            def get_eff_length(x):
+                return x['pos'].sort_values().diff().fillna(K).clip_upper(K).sum()
+            return y.groupby('exon').aggregate(get_eff_length).sum()/float(K*y.shape[0])
+
         # sum kmer counts and coverage over all occurrences of the kmer
         # print motif occurrences and coverage counts as integer
         if use_motifs:
-            # get effective length of motif match accounting for overlaps by considering distances between kmer positions
-            eff_length=tot_kmer_cov.join(motifs).groupby('motif').aggregate(lambda y: y.groupby('exon').aggregate(lambda x: x['pos'].sort_values().diff().fillna(K).clip_upper(K).sum()).sum()/(K*y.shape[0]))['pos']
+            overlap_factor=tot_kmer_cov[['exon','pos']].join(motifs).groupby('motif').aggregate(get_overlap_factor)['pos']
             # sum over all kmers for this motif
-            tot_motif_cov=tot_kmer_cov.drop(['exon','pos'],axis=1).join(motifs).groupby('motif').sum().multiply(eff_length,axis=0)
-            tot_motif_cov.loc['tot']=tot_kmer_cov.loc['tot'].drop(['exon','pos'],axis=1).sum(axis=0)
-            for motif,vals in tot_motif_cov.iterrows():
-                outf.write("{0}\t{1}\t".format(name,motif)\
-                           +'\t'.join('{0:.0f}'.format(v) for v in vals)+'\n')
+            tot_motif_cov=tot_kmer_cov.join(motifs).groupby('motif').sum().multiply(overlap_factor,axis=0)
+            tot_motif_cov.loc['tot']=tot_kmer_cov.loc[['tot']].sum(axis=0)
+            for motif,vals in tot_motif_cov.drop(['exon','pos'],axis=1).iterrows():
+                outf.write("{0}\t{1}\t{2:.4f}\t".format(name,motif,vals['count'])\
+                           +'\t'.join('{0:.0f}'.format(v) for v in vals.drop('count'))+'\n')
         else:
-            eff_length=tot_kmer_cov.groupby('kmer').aggregate(lambda y: y.groupby('exon').aggregate(lambda x: x['pos'].sort_values().diff().fillna(K).clip_upper(K).sum()).sum()/(K*y.shape[0]))['pos']
+            overlap_factor=tot_kmer_cov[['exon','pos']].groupby('kmer').aggregate(get_overlap_factor)['pos']
             # sum over all kmers for this motif
-            for kmer,vals in tot_kmer_cov.drop(['exon','pos'],axis=1).groupby('kmer').sum().multiply(eff_length,axis=0).sum().iterrows():
-                outf.write("{0}\t{1}\t".format(name,kmer)\
-                           +'\t'.join('{0:.0f}'.format(v) for v in vals)+'\n')
+            tot_kmer_cov=tot_kmer_cov.groupby('kmer').sum().multiply(overlap_factor,axis=0)
+            for kmer,vals in tot_kmer_cov.drop(['exon','pos'],axis=1).iterrows():
+                outf.write("{0}\t{1}\t{2:.4f}\t".format(name,kmer,vals['count'])\
+                           +'\t'.join('{0:.0f}'.format(v) for v in vals.drop('count'))+'\n')
 
     print >> sys.stderr, 'done ({0} skipped)'.format(nskipped)
 
