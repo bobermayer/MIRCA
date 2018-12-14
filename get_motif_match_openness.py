@@ -61,10 +61,12 @@ if __name__ == '__main__':
     for name,chrom,strand,regions in get_regions(inf, options.flank_len):
 
         if len(regions)==0:
+            nskipped+=1
             continue
 
         region_exons=regions[options.region]
         if len(region_exons)==0:
+            nskipped+=1
             continue
 
         openness=[]
@@ -77,6 +79,7 @@ if __name__ == '__main__':
             seqs.append(genome.fetch(reference=chrom,start=start,end=end).upper())
 
         if len(seqs)==0:
+            nskipped+=1
             continue
 
         # combine exons for utr3/utr5/cds/tx
@@ -120,10 +123,10 @@ if __name__ == '__main__':
         # get count and openness for each kmer in each region
         kmer_open=[]
         for i in range(nexons):
-			for k in range(exon_length[i]-K+1):
-				# use mean read count over stretch of length K+2*E
-				kmer_open.append([seqs[i][k:k+K],1,i,k,openness[i][max(k-E,0):min(k+K+E,exon_length[i])].mean()])
-			kmer_open.append(['tot',exon_length[i],i,0,openness[i].sum()])
+            for k in range(exon_length[i]-K+1):
+                # use mean read count over stretch of length K+2*E
+                kmer_open.append([seqs[i][k:k+K],1,i,k,openness[i][max(k-E,0):min(k+K+E,exon_length[i])].mean()])
+            kmer_open.append(['tot',exon_length[i],i,0,openness[i].sum()])
 
         # get effective length of motif match accounting for overlaps by considering distances between kmer positions
         def get_overlap_factor(y):
@@ -131,7 +134,7 @@ if __name__ == '__main__':
                 return x['pos'].sort_values().diff().fillna(K).clip_upper(K).sum()
             return y.groupby('exon').aggregate(get_eff_length).sum()/float(K*y.shape[0])
 
-		# sum kmer counts and average opennes over all occurrences of the kmer
+        # sum kmer counts and average opennes over all occurrences of the kmer
         cols=['kmer','count','exon','pos','openness']
         tot_kmer_open=pd.DataFrame(kmer_open, columns=cols).set_index('kmer')
 
@@ -139,15 +142,17 @@ if __name__ == '__main__':
         if use_motifs:
             overlap_factor=tot_kmer_open[['exon','pos']].join(motifs).groupby('motif').aggregate(get_overlap_factor)['pos']
             # sum over all kmers for this motif
-            tot_motif_open=tot_kmer_open.join(motifs).groupby('motif').sum().multiply(overlap_factor,axis=0)
+            tot_motif_open=tot_kmer_open.join(motifs).groupby('motif').sum()
             tot_motif_open.loc['tot']=tot_kmer_open.loc[['tot']].sum(axis=0)
+            overlap_factor.loc['tot']=1
             for motif,vals in tot_motif_open.iterrows():
-                outf.write("{0}\t{1}\t{2:.4f}\t{3:.4f}\n".format(name,motif,vals['count'],vals['openness']/vals['count']))
+                outf.write("{0}\t{1}\t{2:.4f}\t{3:.4f}\n".format(name,motif,vals['count']*overlap_factor[motif],vals['openness']/vals['count']))
         else:
             overlap_factor=tot_kmer_open[['exon','pos']].groupby('kmer').aggregate(get_overlap_factor)['pos']
-            tot_kmer_open=tot_kmer_open.groupby('kmer').sum().multiply(overlap_factor,axis=0)
+            tot_kmer_open=tot_kmer_open.groupby('kmer').sum()
+            overlap_factor.loc['tot']=1
             for kmer,vals in tot_kmer_open.iterrows():
-                outf.write("{0}\t{1}\t{2:.4f}\t{3:.4f}\n".format(name,kmer,vals['count'],vals['openness']/vals['count']))
+                outf.write("{0}\t{1}\t{2:.4f}\t{3:.4f}\n".format(name,kmer,vals['count']*overlap_factor[kmer],vals['openness']/vals['count']))
 
     print >> sys.stderr, 'done ({0} skipped)'.format(nskipped)
 
